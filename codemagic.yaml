@@ -17,8 +17,13 @@ workflows:
           
           if [ -n "$ISO_FILE" ]; then
             echo "ISO encontrada: $ISO_FILE"
-            # Passa os 3 argumentos exigidos pelo xdvdfs.py: ISO, alvo (game) e destino (generated/game)
-            python3 tools/xdvdfs.py "$ISO_FILE" game generated/game
+            
+            echo "--- INÍCIO DO CÓDIGO DO XDVDFS.PY ---"
+            cat tools/xdvdfs.py
+            echo "--- FIM DO CÓDIGO DO XDVDFS.PY ---"
+            
+            # Tenta extrair a raiz da ISO para a pasta de destino
+            python3 tools/xdvdfs.py "$ISO_FILE" . generated/game || python3 tools/xdvdfs.py "$ISO_FILE" "" generated/game || true
           else
             echo "Erro: Nenhuma ISO encontrada."
             exit 1
