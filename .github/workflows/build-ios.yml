@@ -3,6 +3,7 @@ name: Build iOS App
 on:
   push:
     branches: [ "main", "Principal" ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -22,3 +23,9 @@ jobs:
       run: |
         cd build-ios
         xcodebuild -sdk iphoneos -configuration Release build
+
+    - name: Salvar Artefato do Jogo (IPA/App)
+      uses: actions/upload-artifact@v4
+      with:
+        name: Black-iOS-Build
+        path: build-ios/Release-iphoneos/
