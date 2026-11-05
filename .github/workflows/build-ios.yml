@@ -1,0 +1,24 @@
+name: Build iOS App
+
+on:
+  push:
+    branches: [ "main", "Principal" ]
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Copiar código do repositório
+      uses: actions/checkout@v4
+
+    - name: Configurar CMake
+      run: |
+        mkdir build-ios
+        cd build-ios
+        cmake -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 -G "Xcode" ..
+
+    - name: Compilar projeto no Xcode
+      run: |
+        cd build-ios
+        xcodebuild -sdk iphoneos -configuration Release build
