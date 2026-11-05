@@ -8,10 +8,12 @@ workflows:
     scripts:
       - name: Configurar CMake e Compilar
         script: |
-          mkdir build-ios
+          # Entrar na pasta do projeto descarregada do Android se necessário
+          cd Black-Android-1.8.1 || true
+          mkdir -p build-ios
           cd build-ios
           cmake -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 -G "Xcode" ..
           xcodebuild -sdk iphoneos -configuration Release build
     artifacts:
-      - build-ios/Release-iphoneos/*.app
-      - build-ios/**/*.ipa
+      - Black-Android-1.8.1/build-ios/Release-iphoneos/*.app
+      - Black-Android-1.8.1/build-ios/**/*.ipa
