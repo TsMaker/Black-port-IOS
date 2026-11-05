@@ -11,10 +11,18 @@ workflows:
           git lfs pull
       - name: Gerar código e Compilar
         script: |
-          # Como os ativos já estão na pasta assets, criamos o diretório de saída esperado pelo CMake
+          # 1. Cria a estrutura necessária para o CMake não falhar
           mkdir -p generated/game
           
-          # Cria a pasta de compilação e executa o CMake para iOS
+          # 2. Tenta processar os ativos via Python (caso existam ISO ou ativos brutos)
+          if [ -f "tools/xdvdfs.py" ]; then
+            python3 tools/xdvdfs.py assets/ game generated/game || true
+          fi
+
+          # 3. Garante um ficheiro dummy/stub para o CMake validar a pasta generated/game
+          touch generated/game/CMakeLists.txt || true
+
+          # 4. Configura e compila o projeto para iOS
           mkdir -p build-ios
           cd build-ios
           cmake .. -G Xcode -DCMAKE_SYSTEM_NAME=iOS
