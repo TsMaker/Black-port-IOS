@@ -11,21 +11,20 @@ workflows:
           git lfs pull
       - name: Gerar código e Compilar
         script: |
+          echo "=== PRIMEIRAS 40 LINHAS DO BUILD.BAT ==="
+          head -n 40 build.bat
+          echo "========================================="
+
           mkdir -p generated/game assets
           
           ISO_FILE=$(find iso ISO -iname "*.iso" 2>/dev/null | head -n 1)
           
           if [ -n "$ISO_FILE" ]; then
             echo "ISO encontrada: $ISO_FILE"
-            # Copia ou cria um link da ISO para a pasta assets se o CMake procurar lá
-            cp "$ISO_FILE" assets/Black.iso
-            
-            # Tenta extrair usando o xdvdfs.py listando os ficheiros ou extraindo o default.xbe
-            python3 tools/xdvdfs.py "$ISO_FILE" default.xbe generated/game/default.xbe || true
           else
             echo "Erro: Nenhuma ISO encontrada."
             exit 1
-          end
+          fi
 
           mkdir -p build-ios
           cd build-ios
