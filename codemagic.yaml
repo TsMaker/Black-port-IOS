@@ -1,0 +1,17 @@
+workflows:
+  ios-build:
+    name: Build iOS App
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    environment:
+      xcode: latest
+    scripts:
+      - name: Configurar CMake e Compilar
+        script: |
+          mkdir build-ios
+          cd build-ios
+          cmake -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 -G "Xcode" ..
+          xcodebuild -sdk iphoneos -configuration Release build
+    artifacts:
+      - build-ios/Release-iphoneos/*.app
+      - build-ios/**/*.ipa
