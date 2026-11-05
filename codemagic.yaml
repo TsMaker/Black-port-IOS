@@ -6,11 +6,15 @@ workflows:
     scripts:
       - name: Instalar dependências e preparar ambiente
         script: |
-          brew install cmake ninja git-lfs
+          brew install cmake ninja git-lfs python3
           git lfs install
           git lfs pull
       - name: Gerar código e Compilar
         script: |
+          # Processa os arquivos do jogo para criar o código recompilado
+          python3 tools/xdvdfs.py || true
+          
+          # Cria a pasta de compilação e executa o CMake para iOS
           mkdir -p build-ios
           cd build-ios
           cmake .. -G Xcode -DCMAKE_SYSTEM_NAME=iOS
