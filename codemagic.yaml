@@ -11,18 +11,21 @@ workflows:
           git lfs pull
       - name: Gerar código e Compilar
         script: |
-          # 1. Cria a estrutura necessária para o CMake não falhar
+          # Garante que o diretório de saída existe
           mkdir -p generated/game
           
-          # 2. Tenta processar os ativos via Python (caso existam ISO ou ativos brutos)
-          if [ -f "tools/xdvdfs.py" ]; then
-            python3 tools/xdvdfs.py assets/ game generated/game || true
+          # Deteta automaticamente a ISO na pasta iso/ sem falhar por causa de maiúsculas/minúsculas
+          ISO_FILE=$(find iso -iname "*.iso" | head -n 1)
+          
+          if [ -n "$ISO_FILE" ]; then
+            echo "ISO encontrada: $ISO_FILE"
+            python3 tools/xdvdfs.py "$ISO_FILE" game generated/game
+          else
+            echo "Erro: Nenhuma ISO encontrada na pasta iso/"
+            exit 1
           fi
 
-          # 3. Garante um ficheiro dummy/stub para o CMake validar a pasta generated/game
-          touch generated/game/CMakeLists.txt || true
-
-          # 4. Configura e compila o projeto para iOS
+          # Configura e compila o projeto para iOS
           mkdir -p build-ios
           cd build-ios
           cmake .. -G Xcode -DCMAKE_SYSTEM_NAME=iOS
