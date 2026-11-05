@@ -1,68 +1,16 @@
-workflows:
-  black-ios:
-    name: Black iOS (unsigned)
+  scan-android:
+    name: Mapear codigo Android
     instance_type: mac_mini_m2
-    max_build_duration: 120
-    environment:
-      xcode: latest
-      vars:
-        SDL_REF: "release-3.2.x"   # confira no build.gradle qual versão o Gradle clona
-        # GAME_ISO_URL: defina como variável secreta se a ISO não estiver no repo
+    max_build_duration: 10
     scripts:
-      - name: Dependências
+      - name: Procurar dependencias de Android
         script: |
-          brew install cmake ninja git-lfs python3
-          git lfs install
-          git lfs pull
-
-      - name: Extrair default.xbe da ISO
-        script: |
-          mkdir -p assets
-          if [ ! -f assets/default.xbe ]; then
-            ISO=$(find assets iso -maxdepth 1 -iname "*.iso" 2>/dev/null | head -n 1)
-            if [ -z "$ISO" ] && [ -n "$GAME_ISO_URL" ]; then
-              mkdir -p iso
-              curl -L "$GAME_ISO_URL" -o iso/game.iso
-              ISO=iso/game.iso
-            fi
-            [ -n "$ISO" ] || { echo "Nenhuma ISO encontrada"; exit 1; }
-            python3 -I tools/xdvdfs.py "$ISO" default.xbe assets/default.xbe
-          fi
-
-      - name: Compilar o recompilador (macOS)
-        script: |
-          TOOLS="$PWD/out/build/host-tools"
-          cmake -S tools -B "$TOOLS" -G Ninja -DCMAKE_BUILD_TYPE=Release
-          cmake --build "$TOOLS"
-          echo "TOOLS=$TOOLS" >> $CM_ENV
-          echo "SDK=$(cat "$TOOLS/sdk_dir.txt")" >> $CM_ENV
-
-      - name: Recompilar xbe para C++
-        script: |
-          if ! grep -q '^\[symbols\]' config/game.toml; then
-            "$TOOLS/xbe_symbols" assets/default.xbe "$SDK/xdk" --out config/game.toml
-          fi
-          "$TOOLS/xbe_recomp" config/game.toml --xdk "$SDK/xdk"
-          ls generated/game | head
-
-      - name: Compilar para iOS (vai falhar até o CMake ganhar um ramo iOS)
-        script: |
-          git clone --depth 1 --branch "$SDL_REF" https://github.com/libsdl-org/SDL third_party/SDL
-          mkdir -p build-ios && cd build-ios
-          cmake .. -G Xcode \
-            -DCMAKE_SYSTEM_NAME=iOS \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
-            -DCMAKE_OSX_ARCHITECTURES=arm64
-          cmake --build . --config Release -- \
-            -sdk iphoneos CODE_SIGNING_ALLOWED=NO
-
-      - name: Empacotar IPA
-        script: |
-          cd build-ios
-          APP=$(find . -name "*.app" -path "*Release-iphoneos*" | head -n 1)
-          mkdir -p Payload && cp -R "$APP" Payload/
-          zip -r Black-unsigned.ipa Payload
-
-    artifacts:
-      - build-ios/Black-unsigned.ipa
-      - generated/game/**   # útil para inspecionar se a etapa 4 funcionou
+          PAT='jni\.h|JNIEnv|android/|__ANDROID__|ANativeWindow|SDL_AndroidGetJNIEnv|SDL_GetAndroid|/storage/|Android/data'
+          echo "=== ARQUIVOS COM CODIGO ANDROID ==="
+          grep -rlE "$PAT" native src || true
+          echo
+          echo "=== ARQUIVOS COM VULKAN ==="
+          grep -rlE "vulkan/vulkan|VK_USE_PLATFORM|SDL_Vulkan_" native src || true
+          echo
+          echo "=== DETALHE (primeiras 120 linhas) ==="
+          grep -rnE "$PAT" native src | head -n 120 || true
