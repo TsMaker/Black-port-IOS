@@ -17,7 +17,8 @@ workflows:
           
           if [ -n "$ISO_FILE" ]; then
             echo "ISO encontrada: $ISO_FILE"
-            python3 tools/xdvdfs.py "$ISO_FILE" generated/game || true
+            # Passa os 3 argumentos exigidos pelo xdvdfs.py: ISO, alvo (game) e destino (generated/game)
+            python3 tools/xdvdfs.py "$ISO_FILE" game generated/game
           else
             echo "Erro: Nenhuma ISO encontrada."
             exit 1
