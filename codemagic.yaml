@@ -14,14 +14,14 @@ workflows:
           # Garante que o diretório de saída existe
           mkdir -p generated/game
           
-          # Deteta automaticamente a ISO na pasta iso/ sem falhar por causa de maiúsculas/minúsculas
-          ISO_FILE=$(find iso -iname "*.iso" | head -n 1)
+          # Procura a ISO independentemente de estar na pasta iso/ ou ISO/
+          ISO_FILE=$(find iso ISO -iname "*.iso" 2>/dev/null | head -n 1)
           
           if [ -n "$ISO_FILE" ]; then
             echo "ISO encontrada: $ISO_FILE"
             python3 tools/xdvdfs.py "$ISO_FILE" game generated/game
           else
-            echo "Erro: Nenhuma ISO encontrada na pasta iso/"
+            echo "Erro: Nenhuma ISO encontrada na pasta ISO/"
             exit 1
           fi
 
