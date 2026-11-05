@@ -11,19 +11,16 @@ workflows:
           git lfs pull
       - name: Gerar código e Compilar
         script: |
+          echo "=== CONTEÚDO EXATO DO BUILD.BAT ==="
+          cat build.bat
+          echo "=================================="
+
           mkdir -p generated/game
           
           ISO_FILE=$(find iso ISO -iname "*.iso" 2>/dev/null | head -n 1)
           
           if [ -n "$ISO_FILE" ]; then
             echo "ISO encontrada: $ISO_FILE"
-            
-            echo "--- INÍCIO DO CÓDIGO DO XDVDFS.PY ---"
-            cat tools/xdvdfs.py
-            echo "--- FIM DO CÓDIGO DO XDVDFS.PY ---"
-            
-            # Tenta extrair a raiz da ISO para a pasta de destino
-            python3 tools/xdvdfs.py "$ISO_FILE" . generated/game || python3 tools/xdvdfs.py "$ISO_FILE" "" generated/game || true
           else
             echo "Erro: Nenhuma ISO encontrada."
             exit 1
