@@ -11,8 +11,8 @@ workflows:
           git lfs pull
       - name: Gerar código e Compilar
         script: |
-          # Processa os arquivos do jogo para criar o código recompilado
-          python3 tools/xdvdfs.py || true
+          # Como os ativos já estão na pasta assets, criamos o diretório de saída esperado pelo CMake
+          mkdir -p generated/game
           
           # Cria a pasta de compilação e executa o CMake para iOS
           mkdir -p build-ios
