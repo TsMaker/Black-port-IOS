@@ -59,6 +59,11 @@ workflows:
           cp -R "$PACKAGE/." "$CM_BUILD_DIR/moltenvk-package/"
           echo "MOLTENVK_ROOT=$CM_BUILD_DIR/moltenvk-package" >> $CM_ENV
 
+      - name: Gerar ícone BLACK TS MAKER
+        script: |
+          magick -background none ios/AppIcon.svg -resize 1024x1024 ios/AppIcon.png
+          file ios/AppIcon.png
+
       - name: Compilar aplicativo iOS
         script: |
           git clone --depth 1 --branch "$SDL_REF" https://github.com/libsdl-org/SDL third_party/SDL
