@@ -76,8 +76,8 @@ std::vector<fs::path> ActivityCardFolders() {
 std::vector<fs::path> ActivityCardFolders() { return {}; }
 #endif
 
-// the Black folder on each SD card or USB stick Android has mounted, /storage/<volume id>/Black; all files access
-// reads them as it does the phone's own storage
+#if defined(__ANDROID__)
+// the Black folder on each SD card or USB stick Android has mounted.
 std::vector<fs::path> RemovableFolders() {
     std::vector<fs::path> out = ActivityCardFolders();
     std::error_code ec, dir_ec;
@@ -95,6 +95,9 @@ std::vector<fs::path> RemovableFolders() {
     out.erase(std::unique(out.begin(), out.end()), out.end());
     return out;
 }
+#else
+std::vector<fs::path> RemovableFolders() { return {}; }
+#endif
 
 std::vector<fs::path> AssetFolders() {
 #if defined(__ANDROID__)
