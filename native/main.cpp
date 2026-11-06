@@ -2,9 +2,11 @@
 // by app::kGame (src/common/game_info.cpp)
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
+#if defined(__ANDROID__)
 #include <android/log.h>
 #include <sys/system_properties.h>
 #include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <atomic>
@@ -46,7 +48,8 @@ std::string Utf8(const wchar_t* w) {
     return s;
 }
 
-// the log's lines to logcat as well: stderr is read on a thread of its own
+#if defined(__ANDROID__)
+// Forward stderr to Android logcat.
 void LogToLogcat() {
     int fds[2];
     if (pipe(fds)) return;
@@ -68,6 +71,9 @@ std::string Property(const char* name) {
     __system_property_get(name, v);
     return v;
 }
+#else
+void LogToLogcat() {}
+#endif
 
 void SetForeground(bool on) {
     {
