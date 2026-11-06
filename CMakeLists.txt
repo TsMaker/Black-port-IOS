@@ -189,6 +189,8 @@ set(BLACK_SOURCES ${RUNTIME_SOURCES} ${GAME_HOST_SOURCES} ${HOST_SOURCES} ${GEN_
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     # iOS applications must be executables; a dynamically loaded library cannot own main().
     add_executable(Black MACOSX_BUNDLE ${BLACK_SOURCES} ${REPO}/ios/platform.mm)
+    set_source_files_properties(${REPO}/ios/AppIcon.png PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    target_sources(Black PRIVATE ${REPO}/ios/AppIcon.png)
     set(BLACK_TARGET Black)
     set_target_properties(Black PROPERTIES
         MACOSX_BUNDLE_INFO_PLIST "${REPO}/ios/Info.plist.in"
