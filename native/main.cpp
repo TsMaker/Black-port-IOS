@@ -34,7 +34,7 @@
 #include "image_symbols.h"
 #include "kernel/kernel.h"
 
-#if defined(__APPLE__) && defined(TARGET_OS_IPHONE)
+#if defined(__APPLE__)
 std::filesystem::path IosDocumentsDirectory();
 #endif
 
