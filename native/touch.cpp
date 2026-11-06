@@ -36,6 +36,10 @@
 #include "core/log.h"
 #include "host.h"
 
+#if defined(__APPLE__)
+bool IosLoadPng(const char* path, std::vector<uint8_t>& rgba, uint32_t& width, uint32_t& height);
+#endif
+
 namespace input {
 
 namespace {
@@ -1624,6 +1628,14 @@ void StepStickMode(int) {
 }
 
 bool LoadSkin(std::vector<uint8_t>& rgba, uint32_t& w, uint32_t& h) {
+#if defined(__APPLE__)
+    // SDL3 core does not include a PNG loader. Decode the touch-control skin with
+    // Apple's ImageIO/CoreGraphics APIs on iOS, keeping the PNG artwork intact.
+    if (!IosLoadPng(kSkinFile, rgba, w, h)) {
+        LOGE("touch: could not load PNG skin: %s", kSkinFile);
+        return false;
+    }
+#else
     SDL_Surface* png = SDL_LoadPNG(kSkinFile);
     SDL_Surface* s = png ? SDL_ConvertSurface(png, SDL_PIXELFORMAT_ABGR8888) : nullptr;  // R G B A in memory
     SDL_DestroySurface(png);
@@ -1637,6 +1649,7 @@ bool LoadSkin(std::vector<uint8_t>& rgba, uint32_t& w, uint32_t& h) {
     for (uint32_t y = 0; y < h; y++)
         std::memcpy(&rgba[size_t(y) * w * 4], static_cast<const uint8_t*>(s->pixels) + size_t(y) * s->pitch, size_t(w) * 4);
     SDL_DestroySurface(s);
+#endif
     g_skin_w = float(w);
     g_skin_h = float(h);
     return true;
