@@ -50,45 +50,26 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     file(WRITE "${XBE_THREADS_SOURCE}" "${XBE_THREADS_CONTENT}")
 endif()
 
-# Linux provides memfd_create(), but Darwin/iOS does not. Use a temporary
-# POSIX shared-memory object for the SDK's aliased physical RAM mappings.
-# Unlink it immediately after opening so no filesystem artifact remains.
+# Apply the tested Darwin memory implementation to the pinned Xbox SDK.
+# This replaces the earlier shm_open workaround: iOS denies shm_open in the app sandbox.
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
-    set(XBE_MEMORY_SOURCE "${SDK}/runtime/kernel/memory.cpp")
-    if(NOT EXISTS "${XBE_MEMORY_SOURCE}")
-        message(FATAL_ERROR "XBE SDK memory runtime source not found: ${XBE_MEMORY_SOURCE}")
+    set(XBE_MEMORY_PATCH "${REPO}/patches/sdk/0001-memory-darwin.patch")
+    execute_process(COMMAND git -C "${SDK}" apply --check "${XBE_MEMORY_PATCH}"
+        RESULT_VARIABLE XBE_MEMORY_PATCH_CHECK OUTPUT_QUIET ERROR_QUIET)
+    if(XBE_MEMORY_PATCH_CHECK EQUAL 0)
+        execute_process(COMMAND git -C "${SDK}" apply "${XBE_MEMORY_PATCH}"
+            RESULT_VARIABLE XBE_MEMORY_PATCH_APPLY)
+        if(NOT XBE_MEMORY_PATCH_APPLY EQUAL 0)
+            message(FATAL_ERROR "Could not apply the tested Darwin memory patch to the Xbox SDK")
+        endif()
+    else()
+        execute_process(COMMAND git -C "${SDK}" apply --check -R "${XBE_MEMORY_PATCH}"
+            RESULT_VARIABLE XBE_MEMORY_PATCH_REVERSE OUTPUT_QUIET ERROR_QUIET)
+        if(NOT XBE_MEMORY_PATCH_REVERSE EQUAL 0)
+            message(FATAL_ERROR "Darwin memory patch does not match the pinned Xbox SDK source")
+        endif()
+        message(STATUS "Darwin memory patch is already applied")
     endif()
-    file(READ "${XBE_MEMORY_SOURCE}" XBE_MEMORY_CONTENT)
-    set(XBE_MEMFD_CALL "int fd = g_base ? memfd_create(\"ram\", 0) : -1;")
-    string(FIND "${XBE_MEMORY_CONTENT}" "${XBE_MEMFD_CALL}" XBE_MEMFD_POS)
-    if(XBE_MEMFD_POS EQUAL -1)
-        message(FATAL_ERROR "Could not locate the SDK memfd_create call for the iOS compatibility patch")
-    endif()
-    string(REPLACE "#include <sys/mman.h>"
-        "#include <sys/mman.h>\n#include <fcntl.h>\n#include <cerrno>\n#include <unistd.h>"
-        XBE_MEMORY_CONTENT "${XBE_MEMORY_CONTENT}")
-    string(REPLACE "${XBE_MEMFD_CALL}"
-        "int fd = -1;\n    if (g_base) {\n        fd = shm_open(\"/black-port-ram\", O_CREAT | O_RDWR, 0600);\n        if (fd >= 0) shm_unlink(\"/black-port-ram\");\n    }"
-        XBE_MEMORY_CONTENT "${XBE_MEMORY_CONTENT}")
-
-    # iOS may reject a 4 GiB anonymous mapping when MAP_NORESERVE is requested
-    # or when a fixed high-address hint is supplied. The guest runtime uses
-    # offsets from g_base, so it does not require a particular host address.
-    # Let Darwin choose an available contiguous range and use portable flags.
-    set(XBE_GUEST_MMAP_CALL "void* p = mmap(reinterpret_cast<void*>(0x100000000ull), size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);")
-    string(FIND "${XBE_MEMORY_CONTENT}" "${XBE_GUEST_MMAP_CALL}" XBE_GUEST_MMAP_POS)
-    if(XBE_GUEST_MMAP_POS EQUAL -1)
-        message(FATAL_ERROR "Could not locate the SDK 4 GB guest mmap call for the iOS compatibility patch")
-    endif()
-    string(REPLACE "${XBE_GUEST_MMAP_CALL}"
-        "void* p = mmap(nullptr, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);"
-        XBE_MEMORY_CONTENT "${XBE_MEMORY_CONTENT}")
-
-    # Keep the SDK's original guest RAM mapping logic. The exact formatting of
-    # that block differs across SDK revisions; diagnostics must not make CMake
-    # configuration fail when the portable shm_open/mmap substitutions above
-    # have already been applied.
-    file(WRITE "${XBE_MEMORY_SOURCE}" "${XBE_MEMORY_CONTENT}")
 endif()
 
 # the recompiled code and the xbe it came from
