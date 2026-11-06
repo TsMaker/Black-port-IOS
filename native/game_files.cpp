@@ -1,7 +1,9 @@
 // The game on Android: its files or a disc image (.iso) in the Black folder on the phone's storage or on an SD card
 // (all files access granted) or in the app's own assets folder. The xbe must be the one this build was recompiled from; the Europe xbe
 // is turned into the US one by src/common/europe.patch, linked into the library.
+#if defined(__ANDROID__)
 #include <jni.h>
+#endif
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_system.h>
@@ -36,12 +38,13 @@ namespace {
 
 namespace fs = std::filesystem;
 
-// the shared storage's folder for the game, readable with all files access: the files or the image in it, or in its
-// assets folder
+// Android shared-storage discovery is compiled only for the Android host.
+#if defined(__ANDROID__)
+// the shared storage's folder for the game, readable with all files access.
 constexpr const char* kShared = "/storage/emulated/0/Black";
 constexpr const char* kVolumes = "/storage";
 
-// the Black folders BlackActivity has from Android's storage volumes, which some phones don't show in /storage
+// the Black folders BlackActivity has from Android's storage volumes.
 std::vector<fs::path> ActivityCardFolders() {
     std::vector<fs::path> out;
     auto* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
@@ -69,6 +72,9 @@ std::vector<fs::path> ActivityCardFolders() {
     env->DeleteLocalRef(activity);
     return out;
 }
+#else
+std::vector<fs::path> ActivityCardFolders() { return {}; }
+#endif
 
 // the Black folder on each SD card or USB stick Android has mounted, /storage/<volume id>/Black; all files access
 // reads them as it does the phone's own storage
@@ -91,12 +97,17 @@ std::vector<fs::path> RemovableFolders() {
 }
 
 std::vector<fs::path> AssetFolders() {
+#if defined(__ANDROID__)
     std::vector<fs::path> out = {fs::path(kShared), fs::path(kShared) / "assets"};
     for (const fs::path& card : RemovableFolders()) {
         out.push_back(card);
         out.push_back(card / "assets");
     }
+#else
+    std::vector<fs::path> out;
+#endif
     out.push_back(ExeDir() / "assets");
+    out.push_back(ExeDir());
     return out;
 }
 
