@@ -1,4 +1,4 @@
-// The Android host: SDL's window and event loop, the settings and folders, the app's lifecycle; the game is described
+// The native host: SDL's window and event loop, the settings and folders, the app's lifecycle; the game is described
 // by app::kGame (src/common/game_info.cpp)
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -343,7 +343,7 @@ void Dispatch(const SDL_Event& e) {
             SetForeground(true);
             break;
         case SDL_EVENT_LOW_MEMORY:
-            LOGW("app: Android is low on memory");
+            LOGW("app: operating system reports low memory");
             break;
         case SDL_EVENT_SENSOR_UPDATE:
         case SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
