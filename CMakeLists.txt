@@ -30,6 +30,26 @@ else()
     set(SDK ${xbe_sdk_SOURCE_DIR})
 endif()
 
+# Apple's pthread_setname_np API accepts only the thread name; the SDK's
+# Linux implementation passes (pthread_t, name). Patch the fetched runtime
+# source for iOS without changing the upstream SDK or Android builds.
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(XBE_THREADS_SOURCE "${SDK}/runtime/kernel/threads.cpp")
+    if(NOT EXISTS "${XBE_THREADS_SOURCE}")
+        message(FATAL_ERROR "XBE SDK thread runtime source not found: ${XBE_THREADS_SOURCE}")
+    endif()
+    file(READ "${XBE_THREADS_SOURCE}" XBE_THREADS_CONTENT)
+    set(XBE_PTHREAD_SETNAME_LINUX "pthread_setname_np(pthread_self(), name);")
+    string(FIND "${XBE_THREADS_CONTENT}" "${XBE_PTHREAD_SETNAME_LINUX}" XBE_PTHREAD_SETNAME_POS)
+    if(XBE_PTHREAD_SETNAME_POS EQUAL -1)
+        message(FATAL_ERROR "Could not locate the SDK pthread_setname_np call for the iOS compatibility patch")
+    endif()
+    string(REPLACE "${XBE_PTHREAD_SETNAME_LINUX}"
+        "#if defined(__APPLE__)\n    pthread_setname_np(name);\n#else\n    pthread_setname_np(pthread_self(), name);\n#endif"
+        XBE_THREADS_CONTENT "${XBE_THREADS_CONTENT}")
+    file(WRITE "${XBE_THREADS_SOURCE}" "${XBE_THREADS_CONTENT}")
+endif()
+
 # the recompiled code and the xbe it came from
 set(XBE_GENERATED ${REPO}/generated/game CACHE PATH "the recompiled code of default.xbe")
 set(XBE_IMAGE ${REPO}/assets/default.xbe CACHE FILEPATH "the xbe it was recompiled from")
