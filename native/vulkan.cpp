@@ -1271,7 +1271,11 @@ bool VulkanBackend::CreateInstance() {
     if (std::any_of(available.begin(), available.end(), [](const VkExtensionProperties& e) {
             return !std::strcmp(e.extensionName, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
         })) {
-        exts.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+        // SDL or another platform layer may already have requested this extension.
+        if (std::find_if(exts.begin(), exts.end(), [](const char* name) {
+                return !std::strcmp(name, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+            }) == exts.end())
+            exts.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
         instance_flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
     }
 #endif
