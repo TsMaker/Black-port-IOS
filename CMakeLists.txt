@@ -65,10 +65,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
         message(FATAL_ERROR "Could not locate the SDK memfd_create call for the iOS compatibility patch")
     endif()
     string(REPLACE "#include <sys/mman.h>"
-        "#include <sys/mman.h>\\n#include <fcntl.h>\\n#include <cerrno>\\n#include <unistd.h>"
+        "#include <sys/mman.h>\n#include <fcntl.h>\n#include <cerrno>\n#include <unistd.h>"
         XBE_MEMORY_CONTENT "${XBE_MEMORY_CONTENT}")
     string(REPLACE "${XBE_MEMFD_CALL}"
-        "int fd = -1;\\n    if (g_base) {\\n        fd = shm_open(\\"/black-port-ram\\", O_CREAT | O_RDWR, 0600);\\n        if (fd >= 0) shm_unlink(\\"/black-port-ram\\");\\n    }"
+        "int fd = -1;\n    if (g_base) {\n        fd = shm_open(\"/black-port-ram\", O_CREAT | O_RDWR, 0600);\n        if (fd >= 0) shm_unlink(\"/black-port-ram\");\n    }"
         XBE_MEMORY_CONTENT "${XBE_MEMORY_CONTENT}")
 
     # iOS may reject a 4 GiB anonymous mapping when MAP_NORESERVE is requested
@@ -85,17 +85,17 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
         XBE_MEMORY_CONTENT "${XBE_MEMORY_CONTENT}")
 
     # Log the exact failing operation instead of collapsing every failure into one message.
-    set(XBE_MEMORY_INIT_BLOCK "if (fd < 0 || ftruncate(fd, kPhysicalSize) ||\\nmmap(g_base + kContiguousBase, kPhysicalSize, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0) == MAP_FAILED ||\\nmmap(g_base + kWriteCombineBase, kPhysicalSize, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0) == MAP_FAILED)\\ng_base = nullptr;")
+    set(XBE_MEMORY_INIT_BLOCK "if (fd < 0 || ftruncate(fd, kPhysicalSize) ||\nmmap(g_base + kContiguousBase, kPhysicalSize, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0) == MAP_FAILED ||\nmmap(g_base + kWriteCombineBase, kPhysicalSize, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0) == MAP_FAILED)\ng_base = nullptr;")
     string(FIND "${XBE_MEMORY_CONTENT}" "${XBE_MEMORY_INIT_BLOCK}" XBE_MEMORY_INIT_POS)
     if(XBE_MEMORY_INIT_POS EQUAL -1)
         message(FATAL_ERROR "Could not locate SDK guest RAM mapping block for iOS diagnostics")
     endif()
-    set(XBE_MEMORY_INIT_DIAGNOSTICS "if (fd < 0) {\\n    LOGE(\\"memory: iOS shm_open failed errno=%d\\", errno);\\n    g_base = nullptr;\\n} else if (ftruncate(fd, kPhysicalSize) != 0) {\\n    LOGE(\\"memory: iOS ftruncate failed errno=%d\\", errno);\\n    g_base = nullptr;\\n} else if (mmap(g_base + kContiguousBase, kPhysicalSize, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0) == MAP_FAILED) {\\n    LOGE(\\"memory: iOS contiguous alias mmap failed errno=%d\\", errno);\\n    g_base = nullptr;\\n} else if (mmap(g_base + kWriteCombineBase, kPhysicalSize, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0) == MAP_FAILED) {\\n    LOGE(\\"memory: iOS write-combine alias mmap failed errno=%d\\", errno);\\n    g_base = nullptr;\\n}\\nif (fd >= 0) close(fd);")
+    set(XBE_MEMORY_INIT_DIAGNOSTICS "if (fd < 0) {\n    LOGE(\"memory: iOS shm_open failed errno=%d\", errno);\n    g_base = nullptr;\n} else if (ftruncate(fd, kPhysicalSize) != 0) {\n    LOGE(\"memory: iOS ftruncate failed errno=%d\", errno);\n    g_base = nullptr;\n} else if (mmap(g_base + kContiguousBase, kPhysicalSize, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0) == MAP_FAILED) {\n    LOGE(\"memory: iOS contiguous alias mmap failed errno=%d\", errno);\n    g_base = nullptr;\n} else if (mmap(g_base + kWriteCombineBase, kPhysicalSize, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0) == MAP_FAILED) {\n    LOGE(\"memory: iOS write-combine alias mmap failed errno=%d\", errno);\n    g_base = nullptr;\n}\nif (fd >= 0) close(fd);")
     string(REPLACE "${XBE_MEMORY_INIT_BLOCK}" "${XBE_MEMORY_INIT_DIAGNOSTICS}"
         XBE_MEMORY_CONTENT "${XBE_MEMORY_CONTENT}")
     set(XBE_INITIAL_MMAP_LOG "g_base = p == MAP_FAILED ? nullptr : static_cast<uint8_t*>(p);")
     string(REPLACE "${XBE_INITIAL_MMAP_LOG}"
-        "g_base = p == MAP_FAILED ? nullptr : static_cast<uint8_t*>(p);\\nif (p == MAP_FAILED) LOGE(\\"memory: iOS 4 GB reservation mmap failed errno=%d\\", errno);"
+        "g_base = p == MAP_FAILED ? nullptr : static_cast<uint8_t*>(p);\nif (p == MAP_FAILED) LOGE(\"memory: iOS 4 GB reservation mmap failed errno=%d\", errno);"
         XBE_MEMORY_CONTENT "${XBE_MEMORY_CONTENT}")
 
     file(WRITE "${XBE_MEMORY_SOURCE}" "${XBE_MEMORY_CONTENT}")
