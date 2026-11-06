@@ -421,7 +421,11 @@ private:
     }
 
     void Run() {
+#if defined(__APPLE__)
+        pthread_setname_np("render");
+#else
         pthread_setname_np(pthread_self(), "render");
+#endif
         for (;;) {
             Batch* b;
             {
