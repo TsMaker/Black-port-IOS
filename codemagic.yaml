@@ -64,11 +64,12 @@ workflows:
           git clone --depth 1 --branch "$SDL_REF" https://github.com/libsdl-org/SDL third_party/SDL
           # Resolve the package from disk in this step instead of relying only on
           # cross-step environment propagation.
-          MVK_FRAMEWORK=$(find "$CM_BUILD_DIR/moltenvk-package" -type d -name MoltenVK.xcframework -print -quit)
-          [ -n "$MVK_FRAMEWORK" ] || { echo "MoltenVK.xcframework não encontrado"; find "$CM_BUILD_DIR/moltenvk-package" -maxdepth 6 -print; exit 1; }
-          MOLTENVK_ROOT=$(dirname "$MVK_FRAMEWORK")
-          [ -f "$MOLTENVK_ROOT/MoltenVK/include/vulkan/vulkan.h" ] || { echo "Cabeçalhos Vulkan ausentes em $MOLTENVK_ROOT/MoltenVK/include"; find "$CM_BUILD_DIR/moltenvk-package" -maxdepth 7 -print; exit 1; }
-          echo "Usando MOLTENVK_ROOT=$MOLTENVK_ROOT"
+          MOLTENVK_ROOT="$CM_BUILD_DIR/moltenvk-package"
+          MVK_LIBRARY="$MOLTENVK_ROOT/MoltenVK/static/MoltenVK.xcframework/ios-arm64/libMoltenVK.a"
+          [ -f "$MOLTENVK_ROOT/MoltenVK/static/MoltenVK.xcframework/Info.plist" ] || { echo "MoltenVK static XCFramework não encontrado"; find "$MOLTENVK_ROOT" -maxdepth 7 -print; exit 1; }
+          [ -f "$MVK_LIBRARY" ] || { echo "Biblioteca MoltenVK iOS arm64 não encontrada: $MVK_LIBRARY"; find "$MOLTENVK_ROOT" -maxdepth 8 -print; exit 1; }
+          [ -f "$MOLTENVK_ROOT/MoltenVK/include/vulkan/vulkan.h" ] || { echo "Cabeçalhos Vulkan ausentes"; exit 1; }
+          echo "Usando pacote MoltenVK em $MOLTENVK_ROOT"
           mkdir -p build-ios && cd build-ios
           cmake .. -G Xcode \
             -DCMAKE_SYSTEM_NAME=iOS \
