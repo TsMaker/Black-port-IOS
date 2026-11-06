@@ -1268,7 +1268,7 @@ bool VulkanBackend::CreateInstance() {
     std::vector<VkExtensionProperties> available(available_count);
     vkEnumerateInstanceExtensionProperties(nullptr, &available_count, available.data());
 #ifdef VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME
-    if (HasExtension(available, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)) {
+    if (std::any_of(available.begin(), available.end(), [](const VkExtensionProperties& e) {\n            return !std::strcmp(e.extensionName, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);\n        })) {
         exts.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
         instance_flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
     }
