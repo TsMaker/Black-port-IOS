@@ -4,6 +4,9 @@
 
 cmake_minimum_required(VERSION 3.22)
 project(black LANGUAGES C CXX)
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    enable_language(OBJCXX)
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -114,7 +117,7 @@ set(BLACK_SOURCES ${RUNTIME_SOURCES} ${GAME_HOST_SOURCES} ${HOST_SOURCES} ${GEN_
 
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     # iOS applications must be executables; a dynamically loaded library cannot own main().
-    add_executable(Black MACOSX_BUNDLE ${BLACK_SOURCES})
+    add_executable(Black MACOSX_BUNDLE ${BLACK_SOURCES} ${REPO}/ios/platform.mm)
     set(BLACK_TARGET Black)
     set_target_properties(Black PROPERTIES
         MACOSX_BUNDLE_INFO_PLIST "${REPO}/ios/Info.plist.in"
