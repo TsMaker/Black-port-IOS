@@ -34,6 +34,10 @@
 #include "image_symbols.h"
 #include "kernel/kernel.h"
 
+#if defined(__APPLE__) && defined(TARGET_OS_IPHONE)
+std::filesystem::path IosDocumentsDirectory();
+#endif
+
 namespace {
 
 SDL_Window* g_window = nullptr;
@@ -266,6 +270,8 @@ std::filesystem::path ExeDir() {
         if (SDL_GetAndroidExternalStorageState() & SDL_ANDROID_EXTERNAL_STORAGE_WRITE) p = SDL_GetAndroidExternalStoragePath();
         if (!p) p = SDL_GetAndroidInternalStoragePath();
         return std::filesystem::path(p ? p : ".");
+#elif defined(__APPLE__)
+        return IosDocumentsDirectory();
 #else
         char* p = SDL_GetPrefPath("TsMaker", "Black");
         std::filesystem::path result = p ? std::filesystem::path(p) : std::filesystem::temp_directory_path();
