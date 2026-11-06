@@ -84,20 +84,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
         "void* p = mmap(nullptr, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);"
         XBE_MEMORY_CONTENT "${XBE_MEMORY_CONTENT}")
 
-    # Log the exact failing operation instead of collapsing every failure into one message.
-    set(XBE_MEMORY_INIT_BLOCK "if (fd < 0 || ftruncate(fd, kPhysicalSize) ||\nmmap(g_base + kContiguousBase, kPhysicalSize, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0) == MAP_FAILED ||\nmmap(g_base + kWriteCombineBase, kPhysicalSize, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0) == MAP_FAILED)\ng_base = nullptr;")
-    string(FIND "${XBE_MEMORY_CONTENT}" "${XBE_MEMORY_INIT_BLOCK}" XBE_MEMORY_INIT_POS)
-    if(XBE_MEMORY_INIT_POS EQUAL -1)
-        message(FATAL_ERROR "Could not locate SDK guest RAM mapping block for iOS diagnostics")
-    endif()
-    set(XBE_MEMORY_INIT_DIAGNOSTICS "if (fd < 0) {\n    LOGE(\"memory: iOS shm_open failed errno=%d\", errno);\n    g_base = nullptr;\n} else if (ftruncate(fd, kPhysicalSize) != 0) {\n    LOGE(\"memory: iOS ftruncate failed errno=%d\", errno);\n    g_base = nullptr;\n} else if (mmap(g_base + kContiguousBase, kPhysicalSize, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0) == MAP_FAILED) {\n    LOGE(\"memory: iOS contiguous alias mmap failed errno=%d\", errno);\n    g_base = nullptr;\n} else if (mmap(g_base + kWriteCombineBase, kPhysicalSize, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0) == MAP_FAILED) {\n    LOGE(\"memory: iOS write-combine alias mmap failed errno=%d\", errno);\n    g_base = nullptr;\n}\nif (fd >= 0) close(fd);")
-    string(REPLACE "${XBE_MEMORY_INIT_BLOCK}" "${XBE_MEMORY_INIT_DIAGNOSTICS}"
-        XBE_MEMORY_CONTENT "${XBE_MEMORY_CONTENT}")
-    set(XBE_INITIAL_MMAP_LOG "g_base = p == MAP_FAILED ? nullptr : static_cast<uint8_t*>(p);")
-    string(REPLACE "${XBE_INITIAL_MMAP_LOG}"
-        "g_base = p == MAP_FAILED ? nullptr : static_cast<uint8_t*>(p);\nif (p == MAP_FAILED) LOGE(\"memory: iOS 4 GB reservation mmap failed errno=%d\", errno);"
-        XBE_MEMORY_CONTENT "${XBE_MEMORY_CONTENT}")
-
+    # Keep the SDK's original guest RAM mapping logic. The exact formatting of
+    # that block differs across SDK revisions; diagnostics must not make CMake
+    # configuration fail when the portable shm_open/mmap substitutions above
+    # have already been applied.
     file(WRITE "${XBE_MEMORY_SOURCE}" "${XBE_MEMORY_CONTENT}")
 endif()
 
