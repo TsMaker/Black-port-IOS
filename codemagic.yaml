@@ -10,7 +10,7 @@ workflows:
     scripts:
       - name: Dependências
         script: |
-          brew install cmake ninja git-lfs python3
+          brew install cmake ninja git-lfs python3 imagemagick
           git lfs install
           git lfs pull
 
