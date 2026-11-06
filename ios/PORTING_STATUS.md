@@ -1,84 +1,57 @@
 # iOS port status: SDL3 + MoltenVK
 
-This directory tracks the iOS migration separately from the existing Android host.
-The Android build remains the reference implementation; do not remove Android
-sources or weaken the Vulkan renderer to make an iOS build pass.
+The iOS port is being developed on the separate `ios-moltenvk-port` branch.
+The Android target remains in the build graph and the Vulkan renderer is retained.
 
-## Current status
+## Implemented in the repository
 
-The repository is not yet an iOS-buildable application. The current top-level
-CMake project creates an Android shared library and links Android system
-libraries. The current native host also contains Android JNI, logcat,
-system-property, and shared-storage calls.
+- Split the top-level CMake target: Android continues to build the `main` shared
+  library; iOS builds an arm64 `Black.app` bundle.
+- Added an Objective-C++ bridge for the app's Documents directory.
+- Guarded Android JNI, storage, system-property, logcat, and Activity-only code
+  so those implementations are not compiled into the iOS target.
+- Replaced the ELF-only embedded Europe patch assembly with a generated,
+  portable C++ byte array.
+- Added iOS MoltenVK framework/header integration and Vulkan portability
+  enumeration/device-extension handling.
+- Added an iOS Info.plist, Codemagic build workflow, and setup notes.
+- Enabled iOS file sharing so game data can be copied through Files into
+  **On My iPhone > Black**; the host scans Documents and its `assets` folder.
 
-The renderer in `native/vulkan.cpp` is a Vulkan renderer and should be retained.
-On iOS, Vulkan must be provided by MoltenVK and presented through SDL3's iOS
-Metal-backed Vulkan surface. This is not the same as linking the Android Vulkan
-loader.
+## Not yet verified
 
-## Required migration work
+- No successful Xcode/Codemagic build has been recorded.
+- No IPA has been produced or installed on a device.
+- Vulkan surface creation, shader compilation, GPU feature/format compatibility,
+  rendering, audio, touch/gamepad input, and suspend/resume have not been tested
+  on a physical iPhone.
+- The Codemagic workflow currently packages an **unsigned** IPA. A signing
+  certificate and provisioning profile are required for normal installation.
+- iOS update checking remains a platform stub; it does not claim to check for
+  updates.
+- The app uses Files file sharing rather than a native document-picker UI.
 
-1. **Build graph**
-   - Split the Android and iOS targets in the top-level CMake configuration.
-   - Keep the Android target and its link libraries unchanged.
-   - Build an iOS app/bundle for arm64; do not produce an Android-style
-     `libmain.so`.
-   - Integrate SDL3 and the iOS MoltenVK/Vulkan SDK artifacts for the selected
-     Xcode toolchain.
-   - Link the Vulkan loader/MoltenVK and the required Apple frameworks.
+## Build requirements
 
-2. **Host/platform layer**
-   - Keep Android-only JNI code behind Android-specific compilation.
-   - Implement iOS equivalents for logging, device/system information,
-     lifecycle/foreground state, app settings, and writable directories.
-   - Use SDL3/iOS APIs for windowing, touch, controller input, and sensors.
-   - Remove Android JNI entry points from the iOS target.
+The iOS workflow requires an Xbox game ISO supplied by the user through the
+Codemagic environment variable `GAME_ISO_URL`, or an ISO already present in the
+repository's `assets/` or `iso/` directory. The game image is not included in
+the repository or app. The recompiled sources and XBE must come from the same
+legally obtained game image.
 
-3. **Game file import**
-   - Replace Android shared-storage scanning with an iOS document-picker flow.
-   - Copy user-selected ISO/XBE files into the app's sandbox and persist their
-     security-scoped access correctly.
-   - Store saves, settings, logs, and shader/pipeline caches in writable
-     Application Support or Caches directories.
-   - Do not bundle copyrighted game data in the app.
+Run the Codemagic workflow **Black iOS (unsigned)** on this branch to obtain the
+first real build log. Fixes after that point should be driven by the actual
+Xcode/CMake diagnostics rather than treating an untested configuration as
+working.
 
-4. **Recompiler output**
-   - The game-specific generated C++ sources are required by CMake.
-   - The recompiler toolchain and the matching `assets/default.xbe` must be
-     available before the app target can compile.
-   - The generated sources and XBE must correspond to the same game image.
-   - Do not create empty placeholder generated directories to bypass this check.
+## Release validation checklist
 
-5. **Vulkan compatibility**
-   - Request instance extensions through SDL3 for the actual iOS surface.
-   - Verify MoltenVK supports every Vulkan feature/format used by the renderer.
-   - Preserve the current renderer and shaders; use feature fallbacks only where
-     MoltenVK lacks a capability.
-   - Validate surface recreation, app suspend/resume, swapchain recreation,
-     shader compilation, texture formats, and pipeline cache persistence.
+- [ ] Xcode successfully builds the arm64 iOS app bundle.
+- [ ] The app bundle contains SDL3 and the correct iOS MoltenVK binary.
+- [ ] The app launches on a real iPhone/iPad and creates a Vulkan surface.
+- [ ] The game image is copied through Files and passes the expected image hash.
+- [ ] The game boots and renders at the intended quality.
+- [ ] Touch/gamepad input, audio, saves, and suspend/resume work.
+- [ ] The IPA is signed with a valid Apple certificate/profile for installation.
 
-## Known Android-only files / code identified so far
-
-- `native/main.cpp`: Android logcat, system properties, external/internal
-  storage paths, Android low-memory handling, and Android platform labels.
-- `native/game_files.cpp`: JNI activity folder access and Android storage
-  volume scanning; its ELF assembly section for the embedded Europe patch also
-  needs a Mach-O-compatible implementation.
-- `native/input.cpp`: Android JNI loose-key/axis/release entry points.
-- `native/update.cpp`: JNI calls into the Android Activity.
-- `CMakeLists.txt`: Android shared-library target and Android system links.
-
-## IPA release criteria
-
-An IPA is considered produced only after all of the following are true:
-
-- Xcode successfully builds an arm64 iOS app bundle.
-- The app bundle contains SDL3 and the correct iOS MoltenVK binaries.
-- The app launches on a real iPhone/iPad and creates a Vulkan surface.
-- The game image is imported from Files and passes the expected image hash.
-- The game boots and renders; input, audio, suspend/resume, and storage work.
-- The IPA is packaged with a valid app bundle. Signing is a separate requirement
-  for installation on a physical device; an unsigned IPA is not installable as-is.
-
-This file records verified repository blockers and the intended migration path.
-It does not claim that an iOS build or IPA has succeeded.
+This status distinguishes source changes from build and device verification.
