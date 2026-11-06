@@ -43,14 +43,30 @@ workflows:
           fi
           "$TOOLS/xbe_recomp" config/game.toml --xdk "$SDK/xdk"
 
-      - name: Compilar para iOS
+      - name: Preparar MoltenVK para iOS
+        script: |
+          git clone --depth 1 https://github.com/KhronosGroup/MoltenVK.git build-moltenvk
+          cd build-moltenvk
+          ./fetchDependencies --ios
+          xcodebuild -project MoltenVKPackaging.xcodeproj \
+            -scheme "MoltenVK Package (iOS only)" \
+            -configuration Release \
+            -destination "generic/platform=iOS" build
+          MVK=$(find "$PWD" -type d -name MoltenVK.xcframework | head -n 1)
+          [ -n "$MVK" ] || { echo "MoltenVK.xcframework não foi gerado"; exit 1; }
+          cp -R "$MVK" "$CM_BUILD_DIR/MoltenVK.xcframework"
+          echo "MOLTENVK_XCFRAMEWORK=$CM_BUILD_DIR/MoltenVK.xcframework" >> $CM_ENV
+
+      - name: Compilar aplicativo iOS
         script: |
           git clone --depth 1 --branch "$SDL_REF" https://github.com/libsdl-org/SDL third_party/SDL
           mkdir -p build-ios && cd build-ios
           cmake .. -G Xcode \
             -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
-            -DCMAKE_OSX_ARCHITECTURES=arm64
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DMOLTENVK_XCFRAMEWORK="$MOLTENVK_XCFRAMEWORK"
           cmake --build . --config Release -- \
             -sdk iphoneos CODE_SIGNING_ALLOWED=NO
 
