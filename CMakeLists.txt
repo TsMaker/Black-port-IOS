@@ -50,6 +50,29 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     file(WRITE "${XBE_THREADS_SOURCE}" "${XBE_THREADS_CONTENT}")
 endif()
 
+# Linux provides memfd_create(), but Darwin/iOS does not. Use a temporary
+# POSIX shared-memory object for the SDK's aliased physical RAM mappings.
+# Unlink it immediately after opening so no filesystem artifact remains.
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(XBE_MEMORY_SOURCE "${SDK}/runtime/kernel/memory.cpp")
+    if(NOT EXISTS "${XBE_MEMORY_SOURCE}")
+        message(FATAL_ERROR "XBE SDK memory runtime source not found: ${XBE_MEMORY_SOURCE}")
+    endif()
+    file(READ "${XBE_MEMORY_SOURCE}" XBE_MEMORY_CONTENT)
+    set(XBE_MEMFD_CALL "int fd = g_base ? memfd_create(\"ram\", 0) : -1;")
+    string(FIND "${XBE_MEMORY_CONTENT}" "${XBE_MEMFD_CALL}" XBE_MEMFD_POS)
+    if(XBE_MEMFD_POS EQUAL -1)
+        message(FATAL_ERROR "Could not locate the SDK memfd_create call for the iOS compatibility patch")
+    endif()
+    string(REPLACE "#include <sys/mman.h>"
+        "#include <sys/mman.h>\n#include <fcntl.h>"
+        XBE_MEMORY_CONTENT "${XBE_MEMORY_CONTENT}")
+    string(REPLACE "${XBE_MEMFD_CALL}"
+        "int fd = -1;\n    if (g_base) {\n        fd = shm_open(\"/black-port-ram\", O_CREAT | O_RDWR, 0600);\n        if (fd >= 0) shm_unlink(\"/black-port-ram\");\n    }"
+        XBE_MEMORY_CONTENT "${XBE_MEMORY_CONTENT}")
+    file(WRITE "${XBE_MEMORY_SOURCE}" "${XBE_MEMORY_CONTENT}")
+endif()
+
 # the recompiled code and the xbe it came from
 set(XBE_GENERATED ${REPO}/generated/game CACHE PATH "the recompiled code of default.xbe")
 set(XBE_IMAGE ${REPO}/assets/default.xbe CACHE FILEPATH "the xbe it was recompiled from")
