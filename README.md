@@ -1,5 +1,5 @@
-# Black for Android
-An unofficial native Android port of the original Xbox version of *Black*, with touch controls, gyroscope aiming, controller support and extended graphics options.
+# Black — Android and iOS port
+An unofficial native port of the original Xbox version of *Black*. The Android version includes touch controls, gyroscope aiming, controller support and extended graphics options. An experimental iOS port is being developed in this repository, using SDL3, Vulkan and MoltenVK.
 
 The game's x86 code is statically recompiled ahead of time to C++ with [XboxXBE-Recomp](https://github.com/TGP482/XboxXBE-Recomp), then built for arm64. Drawing goes through Vulkan, and windowing, input and audio through SDL3. No emulator is involved.
 
@@ -13,6 +13,40 @@ The game's x86 code is statically recompiled ahead of time to C++ with [XboxXBE-
   <br>
   <sub>▶ Gameplay on POCO F6, max settings + gyro aim</sub>
 </p>
+
+## Platform status
+
+- **Android:** existing native port. See the Android installation and build instructions below.
+- **iOS:** experimental port in progress on the `ios-moltenvk-port` branch. The iOS target uses Vulkan with MoltenVK (Vulkan translated to Apple's Metal API). It is not yet a confirmed working release; successful compilation, packaging and on-device testing are still required.
+
+The iOS work does not replace the Android build. Platform-specific changes are guarded so the Android target can continue to use its existing toolchain.
+
+## iOS (experimental)
+
+### Build with Codemagic
+
+The repository includes a Codemagic workflow named **Black iOS (unsigned)** (`black-ios`).
+
+1. Connect this repository to Codemagic.
+2. Select the `ios-moltenvk-port` branch.
+3. Run the **Black iOS (unsigned)** workflow.
+4. If the build completes, download the generated unsigned IPA from the workflow artifacts.
+
+The workflow builds the ARM64 iOS app and links the iOS static library from `MoltenVK.xcframework`. An unsigned IPA is not ready for normal installation: it must be signed with an appropriate Apple certificate and provisioning profile. TestFlight distribution also requires signing and App Store Connect setup.
+
+### Add your own game files
+
+The commercial game files are not included. After installing a signed build:
+
+1. Open **Files** on the iPhone.
+2. Go to **On My iPhone → Black**.
+3. Copy your legally acquired `.iso` image, or `default.xbe` and its data folders, into that location.
+4. Launch the app.
+
+The iOS app uses its Documents directory for game data. Depending on the build, the app also scans its `assets` subfolder.
+
+> [!WARNING]
+> The iOS port is under development. Do not assume that an IPA can be installed or that the game runs until a successful build and device test have been confirmed.
 
 ## Installation
 1. Install the APK.
@@ -73,12 +107,13 @@ The settings are in the game's own options menu, each page under its own button:
 - **Memory**: 4 GB.
 - **Storage**: 2 GB for the game files and saves.
 
-## Building
-Building requires a Windows PC.
+## Building the Android version
+Building the Android version requires a Windows PC. The iOS build is documented in [iOS (experimental)](#ios-experimental) and uses Codemagic.
 
 ### 1. Clone the repository
 ```
-git clone https://github.com/RanggaCasper/Black-Android.git
+git clone https://github.com/TsMaker/Black-port-IOS.git
+cd Black-port-IOS
 ```
 
 ### 2. Add the game files
