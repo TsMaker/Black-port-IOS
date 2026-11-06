@@ -3,7 +3,7 @@
 # portable runtime, the game's sources in src and the Android host in native.
 
 cmake_minimum_required(VERSION 3.22)
-project(black_android LANGUAGES C CXX)
+project(black LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -73,8 +73,14 @@ set(SDL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL)
 if(NOT EXISTS ${SDL_DIR}/CMakeLists.txt)
     message(FATAL_ERROR "SDL3 is missing from ${SDL_DIR}: the Gradle build clones it")
 endif()
-set(SDL_SHARED ON CACHE BOOL "" FORCE)
-set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+    set(SDL_STATIC ON CACHE BOOL "" FORCE)
+    set(SDL_VULKAN ON CACHE BOOL "" FORCE)
+else()
+    set(SDL_SHARED ON CACHE BOOL "" FORCE)
+    set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+endif()
 set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
 set(SDL_RENDER OFF CACHE BOOL "" FORCE)
 set(SDL_GPU OFF CACHE BOOL "" FORCE)
@@ -99,24 +105,57 @@ list(FILTER RUNTIME_SOURCES EXCLUDE REGEX
      "/runtime/app/|/core/input\\.cpp$|/gpu/(d3d12|render_thread)\\.cpp$|/audio/xaudio2\\.cpp$|/xdk/(dsound|d3d8)\\.cpp$")
 # the game's sources: its hooks, sound, Direct3D 8 and settings
 file(GLOB GAME_HOST_SOURCES CONFIGURE_DEPENDS ${GAME}/*/*.cpp)
-file(GLOB ANDROID_SOURCES CONFIGURE_DEPENDS ${NATIVE}/*.cpp)
+file(GLOB HOST_SOURCES CONFIGURE_DEPENDS ${NATIVE}/*.cpp)
 set(IMGUI_SOURCES ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp)
 
-add_library(main SHARED ${RUNTIME_SOURCES} ${GAME_HOST_SOURCES} ${ANDROID_SOURCES} ${GEN_SOURCES} ${IMGUI_SOURCES}
-            ${CMAKE_CURRENT_BINARY_DIR}/image_sha1.cpp ${EUROPE_PATCH_HEADER})
+set(BLACK_SOURCES ${RUNTIME_SOURCES} ${GAME_HOST_SOURCES} ${HOST_SOURCES} ${GEN_SOURCES} ${IMGUI_SOURCES}
+    ${CMAKE_CURRENT_BINARY_DIR}/image_sha1.cpp ${EUROPE_PATCH_HEADER})
+
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    # iOS applications must be executables; a dynamically loaded library cannot own main().
+    add_executable(Black MACOSX_BUNDLE ${BLACK_SOURCES})
+    set(BLACK_TARGET Black)
+    set_target_properties(Black PROPERTIES
+        MACOSX_BUNDLE_INFO_PLIST "${REPO}/ios/Info.plist.in"
+        XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.tsmaker.black"
+        XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
+        XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "15.0"
+        XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO")
+else()
+    add_library(main SHARED ${BLACK_SOURCES})
+    set(BLACK_TARGET main)
+endif()
 # compat/ for the SDK's x86 header, the SDK harness's for the Winsock and DXGI names its portable runtime uses
-target_include_directories(main PRIVATE ${NATIVE}/compat ${SDK}/harness/compat ${NATIVE} ${GAME} ${SDK}/runtime ${GEN}
+target_include_directories(${BLACK_TARGET} PRIVATE ${NATIVE}/compat ${SDK}/harness/compat ${NATIVE} ${GAME} ${SDK}/runtime ${GEN}
                            ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/generated ${glslang_SOURCE_DIR})
-target_include_directories(main SYSTEM PRIVATE ${imgui_SOURCE_DIR})
+target_include_directories(${BLACK_TARGET} SYSTEM PRIVATE ${imgui_SOURCE_DIR})
 # x86 chars are signed, as the game's code and the runtime were written for
-target_compile_options(main PRIVATE -fno-strict-aliasing -fsigned-char)
-set(HOST_SOURCES ${RUNTIME_SOURCES} ${GAME_HOST_SOURCES} ${ANDROID_SOURCES})
-set_source_files_properties(${HOST_SOURCES} PROPERTIES COMPILE_OPTIONS "-include;${NATIVE}/compat/crt.h")
+target_compile_options(${BLACK_TARGET} PRIVATE -fno-strict-aliasing -fsigned-char)
+set_source_files_properties(${HOST_SOURCES} ${RUNTIME_SOURCES} ${GAME_HOST_SOURCES} PROPERTIES
+    COMPILE_OPTIONS "-include;${NATIVE}/compat/crt.h")
 set_source_files_properties(${GEN_SOURCES} PROPERTIES
     COMPILE_OPTIONS "-O2;-w;-fno-strict-aliasing;-fsigned-char")
 set_source_files_properties(${NATIVE}/vk_shader.cpp PROPERTIES COMPILE_DEFINITIONS ENABLE_HLSL)
-target_link_libraries(main PRIVATE SDL3::SDL3 tomlplusplus::tomlplusplus glslang glslang-default-resource-limits
-                      vulkan android log)
-# 16 KB pages, as Android 15 devices may have
-target_link_options(main PRIVATE -Wl,-z,max-page-size=16384)
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(MOLTENVK_XCFRAMEWORK "" CACHE PATH "Path to MoltenVK.xcframework for iOS")
+    if(NOT EXISTS "${MOLTENVK_XCFRAMEWORK}/Info.plist")
+        message(FATAL_ERROR "Set MOLTENVK_XCFRAMEWORK to the iOS MoltenVK.xcframework directory")
+    endif()
+    find_path(VULKAN_INCLUDE_DIR vulkan/vulkan.h
+        PATHS "${MOLTENVK_XCFRAMEWORK}/ios-arm64/MoltenVK.framework/Headers"
+        NO_DEFAULT_PATH REQUIRED)
+    find_library(MOLTENVK_LIBRARY MoltenVK
+        PATHS "${MOLTENVK_XCFRAMEWORK}/ios-arm64"
+        NO_DEFAULT_PATH REQUIRED)
+    target_include_directories(${BLACK_TARGET} SYSTEM PRIVATE ${VULKAN_INCLUDE_DIR})
+    target_link_libraries(${BLACK_TARGET} PRIVATE SDL3::SDL3-static tomlplusplus::tomlplusplus
+        glslang glslang-default-resource-limits ${MOLTENVK_LIBRARY}
+        "-framework Metal" "-framework UIKit" "-framework QuartzCore" "-framework Foundation")
+    target_link_options(${BLACK_TARGET} PRIVATE "-Wl,-dead_strip")
+else()
+    target_link_libraries(${BLACK_TARGET} PRIVATE SDL3::SDL3 tomlplusplus::tomlplusplus
+        glslang glslang-default-resource-limits vulkan android log)
+    # 16 KB pages, as Android 15 devices may have
+    target_link_options(${BLACK_TARGET} PRIVATE -Wl,-z,max-page-size=16384)
+endif()
