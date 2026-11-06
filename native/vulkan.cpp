@@ -1260,6 +1260,19 @@ bool VulkanBackend::CreateInstance() {
     uint32_t n = 0;
     const char* const* sdl = SDL_Vulkan_GetInstanceExtensions(&n);
     std::vector<const char*> exts(sdl, sdl + n);
+    VkInstanceCreateFlags instance_flags = 0;
+    // MoltenVK is a Vulkan portability implementation. Vulkan requires the
+    // portability-enumeration extension and flag before its physical device is visible.
+    uint32_t available_count = 0;
+    vkEnumerateInstanceExtensionProperties(nullptr, &available_count, nullptr);
+    std::vector<VkExtensionProperties> available(available_count);
+    vkEnumerateInstanceExtensionProperties(nullptr, &available_count, available.data());
+#ifdef VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME
+    if (HasExtension(available, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)) {
+        exts.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+        instance_flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+    }
+#endif
     uint32_t loader = VK_API_VERSION_1_1;
     vkEnumerateInstanceVersion(&loader);
     VkApplicationInfo ai{VK_STRUCTURE_TYPE_APPLICATION_INFO};
@@ -1268,6 +1281,7 @@ bool VulkanBackend::CreateInstance() {
     ai.apiVersion = std::min<uint32_t>(loader, VK_API_VERSION_1_3);
     VkInstanceCreateInfo ci{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
     ci.pApplicationInfo = &ai;
+    ci.flags = instance_flags;
     ci.enabledExtensionCount = uint32_t(exts.size());
     ci.ppEnabledExtensionNames = exts.data();
     VK_CHECK(vkCreateInstance(&ci, nullptr, &instance_));
@@ -1342,6 +1356,11 @@ bool VulkanBackend::PickDevice() {
             api_ = api;
             qfam_ = q;
             dev_exts_ = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+#ifdef VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
+            // MoltenVK requires this device extension when it advertises it.
+            if (HasExtension(ext, VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME))
+                dev_exts_.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+#endif
             auto want = [&](const char* name) {
                 if (HasExtension(ext, name)) dev_exts_.push_back(name);
             };
