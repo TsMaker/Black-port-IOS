@@ -1,6 +1,6 @@
-# Black (original Xbox), statically recompiled, as an Android library: libmain.so, loaded by SDL's activity.
-# The x86 code is recompiled on the PC first (build.bat): this build takes generated/game as it is, with the SDK's
-# portable runtime, the game's sources in src and the Android host in native.
+# Black (original Xbox), statically recompiled for Android or iOS.
+# The x86 code is recompiled on the host first: this build takes generated/game as it is, with the SDK's
+# portable runtime, the game's sources in src and the SDL-based native host in native.
 
 cmake_minimum_required(VERSION 3.22)
 project(black LANGUAGES C CXX)
