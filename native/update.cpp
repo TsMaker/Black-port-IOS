@@ -1,3 +1,7 @@
+// Platform-specific update preference bridge.
+// Android continues to delegate to BlackActivity. Other platforms keep a local
+// default until a native update UI is implemented.
+#if defined(__ANDROID__)
 // The options menu's update check: BlackActivity asks GitHub and shows the answer in a dialog of its own
 #include <atomic>
 
@@ -49,3 +53,20 @@ void SetStartupCheck(bool on) {
 }
 
 }  // namespace host
+
+#else
+#include <atomic>
+
+namespace host {
+static std::atomic<bool> g_startup_check{true};
+
+void CheckForUpdates() {
+    // The iOS update UI is intentionally not a no-op masquerading as a check.
+    // A native App Store/update flow must be implemented before enabling it.
+}
+
+bool StartupCheck() { return g_startup_check.load(); }
+
+void SetStartupCheck(bool on) { g_startup_check.store(on); }
+}  // namespace host
+#endif
