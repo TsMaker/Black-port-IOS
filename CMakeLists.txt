@@ -32,6 +32,18 @@ set(XBE_GENERATED ${REPO}/generated/game CACHE PATH "the recompiled code of defa
 set(XBE_IMAGE ${REPO}/assets/default.xbe CACHE FILEPATH "the xbe it was recompiled from")
 set(GEN ${XBE_GENERATED})
 set(XBE ${XBE_IMAGE})
+
+# Embed the binary Europe patch as a portable C++ array. Inline assembler using
+# .incbin/.rodata is ELF-specific and cannot be assembled by Apple's Mach-O toolchain.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(EUROPE_PATCH_HEADER ${CMAKE_CURRENT_BINARY_DIR}/generated/europe_patch.h)
+add_custom_command(
+    OUTPUT ${EUROPE_PATCH_HEADER}
+    COMMAND ${Python3_EXECUTABLE} ${REPO}/tools/bin2c.py
+            ${GAME}/common/europe.patch ${EUROPE_PATCH_HEADER}
+    DEPENDS ${REPO}/tools/bin2c.py ${GAME}/common/europe.patch
+    VERBATIM
+)
 if(NOT EXISTS ${GEN}/x86_func_mapping.cpp OR NOT EXISTS ${XBE})
     message(FATAL_ERROR "No recompiled code: put the game in assets/ or iso/ and run build.bat, it writes generated/game")
 endif()
@@ -92,10 +104,10 @@ set(IMGUI_SOURCES ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.c
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp)
 
 add_library(main SHARED ${RUNTIME_SOURCES} ${GAME_HOST_SOURCES} ${ANDROID_SOURCES} ${GEN_SOURCES} ${IMGUI_SOURCES}
-            ${CMAKE_CURRENT_BINARY_DIR}/image_sha1.cpp)
+            ${CMAKE_CURRENT_BINARY_DIR}/image_sha1.cpp ${EUROPE_PATCH_HEADER})
 # compat/ for the SDK's x86 header, the SDK harness's for the Winsock and DXGI names its portable runtime uses
 target_include_directories(main PRIVATE ${NATIVE}/compat ${SDK}/harness/compat ${NATIVE} ${GAME} ${SDK}/runtime ${GEN}
-                           ${CMAKE_CURRENT_BINARY_DIR} ${glslang_SOURCE_DIR})
+                           ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/generated ${glslang_SOURCE_DIR})
 target_include_directories(main SYSTEM PRIVATE ${imgui_SOURCE_DIR})
 # x86 chars are signed, as the game's code and the runtime were written for
 target_compile_options(main PRIVATE -fno-strict-aliasing -fsigned-char)
@@ -104,9 +116,6 @@ set_source_files_properties(${HOST_SOURCES} PROPERTIES COMPILE_OPTIONS "-include
 set_source_files_properties(${GEN_SOURCES} PROPERTIES
     COMPILE_OPTIONS "-O2;-w;-fno-strict-aliasing;-fsigned-char")
 set_source_files_properties(${NATIVE}/vk_shader.cpp PROPERTIES COMPILE_DEFINITIONS ENABLE_HLSL)
-set_source_files_properties(${NATIVE}/game_files.cpp PROPERTIES
-    COMPILE_DEFINITIONS "EUROPE_PATCH=\"${GAME}/common/europe.patch\""
-    OBJECT_DEPENDS ${GAME}/common/europe.patch)
 target_link_libraries(main PRIVATE SDL3::SDL3 tomlplusplus::tomlplusplus glslang glslang-default-resource-limits
                       vulkan android log)
 # 16 KB pages, as Android 15 devices may have
