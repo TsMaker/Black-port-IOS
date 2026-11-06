@@ -259,11 +259,11 @@ void CheckImage(const kernel::Disc& disc, const fs::path& iso) {
 void WaitForGame() {
     static bool logged = false;
     if (!logged) {
+#if defined(__ANDROID__)
         std::error_code ec;
         fs::is_directory(kShared, ec);
         std::string cards;
         for (const fs::path& card : RemovableFolders()) cards += ", " + card.string();
-#if defined(__ANDROID__)
         LOGE("game: no game files in %s%s or %s%s, waiting for them", kShared, cards.c_str(),
              (ExeDir() / "assets").c_str(), ec == std::errc::permission_denied ? ", no access to the first" : "");
 #else
