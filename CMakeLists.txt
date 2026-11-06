@@ -142,22 +142,23 @@ set_source_files_properties(${GEN_SOURCES} PROPERTIES
 set_source_files_properties(${NATIVE}/vk_shader.cpp PROPERTIES COMPILE_DEFINITIONS ENABLE_HLSL)
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     set(MOLTENVK_ROOT "" CACHE PATH "Root of the MoltenVK Release package")
-    set(MOLTENVK_XCFRAMEWORK "${MOLTENVK_ROOT}/MoltenVK.xcframework")
+    # The official MoltenVK iOS package ships a static XCFramework under
+    # MoltenVK/static, while Vulkan headers are in the sibling MoltenVK/include.
+    set(MOLTENVK_INCLUDE "${MOLTENVK_ROOT}/MoltenVK/include")
+    set(MOLTENVK_XCFRAMEWORK "${MOLTENVK_ROOT}/MoltenVK/static/MoltenVK.xcframework")
+    set(MOLTENVK_LIBRARY "${MOLTENVK_XCFRAMEWORK}/ios-arm64/libMoltenVK.a")
     if(NOT EXISTS "${MOLTENVK_XCFRAMEWORK}/Info.plist")
-        message(FATAL_ERROR "Set MOLTENVK_ROOT to the directory containing MoltenVK.xcframework and MoltenVK/include")
+        message(FATAL_ERROR "MoltenVK static XCFramework not found at ${MOLTENVK_XCFRAMEWORK}")
     endif()
-    if(NOT EXISTS "${MOLTENVK_ROOT}/MoltenVK/include/vulkan/vulkan.h")
-        message(FATAL_ERROR "MoltenVK Vulkan headers not found under ${MOLTENVK_ROOT}/MoltenVK/include")
+    if(NOT EXISTS "${MOLTENVK_INCLUDE}/vulkan/vulkan.h")
+        message(FATAL_ERROR "MoltenVK Vulkan headers not found under ${MOLTENVK_INCLUDE}")
     endif()
-    if(NOT EXISTS "${MOLTENVK_XCFRAMEWORK}/ios-arm64/MoltenVK.framework/MoltenVK")
-        message(FATAL_ERROR "MoltenVK iOS device framework slice is missing")
+    if(NOT EXISTS "${MOLTENVK_LIBRARY}")
+        message(FATAL_ERROR "MoltenVK iOS arm64 static library not found at ${MOLTENVK_LIBRARY}")
     endif()
-    target_include_directories(${BLACK_TARGET} SYSTEM PRIVATE "${MOLTENVK_ROOT}/MoltenVK/include")
-    target_link_options(${BLACK_TARGET} PRIVATE
-        "SHELL:-F${MOLTENVK_XCFRAMEWORK}/ios-arm64"
-        "SHELL:-framework MoltenVK")
+    target_include_directories(${BLACK_TARGET} SYSTEM PRIVATE "${MOLTENVK_INCLUDE}")
     target_link_libraries(${BLACK_TARGET} PRIVATE SDL3::SDL3-static tomlplusplus::tomlplusplus
-        glslang glslang-default-resource-limits
+        glslang glslang-default-resource-limits "${MOLTENVK_LIBRARY}"
         "-framework Metal" "-framework UIKit" "-framework QuartzCore" "-framework Foundation"
         "-framework CoreGraphics" "-framework IOSurface")
     target_link_options(${BLACK_TARGET} PRIVATE "-Wl,-dead_strip")
