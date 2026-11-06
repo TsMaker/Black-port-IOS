@@ -43,14 +43,40 @@ workflows:
           fi
           "$TOOLS/xbe_recomp" config/game.toml --xdk "$SDK/xdk"
 
-      - name: Compilar para iOS
+      - name: Preparar MoltenVK para iOS
+        script: |
+          git clone --depth 1 https://github.com/KhronosGroup/MoltenVK.git build-moltenvk
+          cd build-moltenvk
+          ./fetchDependencies --ios
+          xcodebuild -project MoltenVKPackaging.xcodeproj \
+            -scheme "MoltenVK Package (iOS only)" \
+            -configuration Release \
+            -destination "generic/platform=iOS" build
+          PACKAGE="$PWD/Package/Release"
+          MVK=$(find "$PACKAGE" -type d -name MoltenVK.xcframework | head -n 1)
+          [ -n "$MVK" ] || { echo "MoltenVK.xcframework não foi gerado em Package/Release"; find "$PWD/Package" -maxdepth 5 -print; exit 1; }
+          mkdir -p "$CM_BUILD_DIR/moltenvk-package"
+          cp -R "$PACKAGE/." "$CM_BUILD_DIR/moltenvk-package/"
+          echo "MOLTENVK_ROOT=$CM_BUILD_DIR/moltenvk-package" >> $CM_ENV
+
+      - name: Compilar aplicativo iOS
         script: |
           git clone --depth 1 --branch "$SDL_REF" https://github.com/libsdl-org/SDL third_party/SDL
+          # Resolve the package from disk in this step instead of relying only on
+          # cross-step environment propagation.
+          MOLTENVK_ROOT="$CM_BUILD_DIR/moltenvk-package"
+          MVK_LIBRARY="$MOLTENVK_ROOT/MoltenVK/static/MoltenVK.xcframework/ios-arm64/libMoltenVK.a"
+          [ -f "$MOLTENVK_ROOT/MoltenVK/static/MoltenVK.xcframework/Info.plist" ] || { echo "MoltenVK static XCFramework não encontrado"; find "$MOLTENVK_ROOT" -maxdepth 7 -print; exit 1; }
+          [ -f "$MVK_LIBRARY" ] || { echo "Biblioteca MoltenVK iOS arm64 não encontrada: $MVK_LIBRARY"; find "$MOLTENVK_ROOT" -maxdepth 8 -print; exit 1; }
+          [ -f "$MOLTENVK_ROOT/MoltenVK/include/vulkan/vulkan.h" ] || { echo "Cabeçalhos Vulkan ausentes"; exit 1; }
+          echo "Usando pacote MoltenVK em $MOLTENVK_ROOT"
           mkdir -p build-ios && cd build-ios
           cmake .. -G Xcode \
             -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
-            -DCMAKE_OSX_ARCHITECTURES=arm64
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DMOLTENVK_ROOT="$MOLTENVK_ROOT"
           cmake --build . --config Release -- \
             -sdk iphoneos CODE_SIGNING_ALLOWED=NO
 

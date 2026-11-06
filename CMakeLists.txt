@@ -1,9 +1,12 @@
-# Black (original Xbox), statically recompiled, as an Android library: libmain.so, loaded by SDL's activity.
-# The x86 code is recompiled on the PC first (build.bat): this build takes generated/game as it is, with the SDK's
-# portable runtime, the game's sources in src and the Android host in native.
+# Black (original Xbox), statically recompiled for Android or iOS.
+# The x86 code is recompiled on the host first: this build takes generated/game as it is, with the SDK's
+# portable runtime, the game's sources in src and the SDL-based native host in native.
 
 cmake_minimum_required(VERSION 3.22)
-project(black_android LANGUAGES C CXX)
+project(black LANGUAGES C CXX)
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    enable_language(OBJCXX)
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -27,11 +30,43 @@ else()
     set(SDK ${xbe_sdk_SOURCE_DIR})
 endif()
 
+# Apple's pthread_setname_np API accepts only the thread name; the SDK's
+# Linux implementation passes (pthread_t, name). Patch the fetched runtime
+# source for iOS without changing the upstream SDK or Android builds.
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(XBE_THREADS_SOURCE "${SDK}/runtime/kernel/threads.cpp")
+    if(NOT EXISTS "${XBE_THREADS_SOURCE}")
+        message(FATAL_ERROR "XBE SDK thread runtime source not found: ${XBE_THREADS_SOURCE}")
+    endif()
+    file(READ "${XBE_THREADS_SOURCE}" XBE_THREADS_CONTENT)
+    set(XBE_PTHREAD_SETNAME_LINUX "pthread_setname_np(pthread_self(), name);")
+    string(FIND "${XBE_THREADS_CONTENT}" "${XBE_PTHREAD_SETNAME_LINUX}" XBE_PTHREAD_SETNAME_POS)
+    if(XBE_PTHREAD_SETNAME_POS EQUAL -1)
+        message(FATAL_ERROR "Could not locate the SDK pthread_setname_np call for the iOS compatibility patch")
+    endif()
+    string(REPLACE "${XBE_PTHREAD_SETNAME_LINUX}"
+        "#if defined(__APPLE__)\n    pthread_setname_np(name);\n#else\n    pthread_setname_np(pthread_self(), name);\n#endif"
+        XBE_THREADS_CONTENT "${XBE_THREADS_CONTENT}")
+    file(WRITE "${XBE_THREADS_SOURCE}" "${XBE_THREADS_CONTENT}")
+endif()
+
 # the recompiled code and the xbe it came from
 set(XBE_GENERATED ${REPO}/generated/game CACHE PATH "the recompiled code of default.xbe")
 set(XBE_IMAGE ${REPO}/assets/default.xbe CACHE FILEPATH "the xbe it was recompiled from")
 set(GEN ${XBE_GENERATED})
 set(XBE ${XBE_IMAGE})
+
+# Embed the binary Europe patch as a portable C++ array. Inline assembler using
+# .incbin/.rodata is ELF-specific and cannot be assembled by Apple's Mach-O toolchain.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(EUROPE_PATCH_HEADER ${CMAKE_CURRENT_BINARY_DIR}/generated/europe_patch.h)
+add_custom_command(
+    OUTPUT ${EUROPE_PATCH_HEADER}
+    COMMAND ${Python3_EXECUTABLE} ${REPO}/tools/bin2c.py
+            ${GAME}/common/europe.patch ${EUROPE_PATCH_HEADER}
+    DEPENDS ${REPO}/tools/bin2c.py ${GAME}/common/europe.patch
+    VERBATIM
+)
 if(NOT EXISTS ${GEN}/x86_func_mapping.cpp OR NOT EXISTS ${XBE})
     message(FATAL_ERROR "No recompiled code: put the game in assets/ or iso/ and run build.bat, it writes generated/game")
 endif()
@@ -61,8 +96,14 @@ set(SDL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL)
 if(NOT EXISTS ${SDL_DIR}/CMakeLists.txt)
     message(FATAL_ERROR "SDL3 is missing from ${SDL_DIR}: the Gradle build clones it")
 endif()
-set(SDL_SHARED ON CACHE BOOL "" FORCE)
-set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+    set(SDL_STATIC ON CACHE BOOL "" FORCE)
+    set(SDL_VULKAN ON CACHE BOOL "" FORCE)
+else()
+    set(SDL_SHARED ON CACHE BOOL "" FORCE)
+    set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+endif()
 set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
 set(SDL_RENDER OFF CACHE BOOL "" FORCE)
 set(SDL_GPU OFF CACHE BOOL "" FORCE)
@@ -87,27 +128,63 @@ list(FILTER RUNTIME_SOURCES EXCLUDE REGEX
      "/runtime/app/|/core/input\\.cpp$|/gpu/(d3d12|render_thread)\\.cpp$|/audio/xaudio2\\.cpp$|/xdk/(dsound|d3d8)\\.cpp$")
 # the game's sources: its hooks, sound, Direct3D 8 and settings
 file(GLOB GAME_HOST_SOURCES CONFIGURE_DEPENDS ${GAME}/*/*.cpp)
-file(GLOB ANDROID_SOURCES CONFIGURE_DEPENDS ${NATIVE}/*.cpp)
+file(GLOB HOST_SOURCES CONFIGURE_DEPENDS ${NATIVE}/*.cpp)
 set(IMGUI_SOURCES ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp)
 
-add_library(main SHARED ${RUNTIME_SOURCES} ${GAME_HOST_SOURCES} ${ANDROID_SOURCES} ${GEN_SOURCES} ${IMGUI_SOURCES}
-            ${CMAKE_CURRENT_BINARY_DIR}/image_sha1.cpp)
+set(BLACK_SOURCES ${RUNTIME_SOURCES} ${GAME_HOST_SOURCES} ${HOST_SOURCES} ${GEN_SOURCES} ${IMGUI_SOURCES}
+    ${CMAKE_CURRENT_BINARY_DIR}/image_sha1.cpp ${EUROPE_PATCH_HEADER})
+
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    # iOS applications must be executables; a dynamically loaded library cannot own main().
+    add_executable(Black MACOSX_BUNDLE ${BLACK_SOURCES} ${REPO}/ios/platform.mm)
+    set(BLACK_TARGET Black)
+    set_target_properties(Black PROPERTIES
+        MACOSX_BUNDLE_INFO_PLIST "${REPO}/ios/Info.plist.in"
+        XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.tsmaker.black"
+        XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
+        XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "15.0"
+        XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO")
+else()
+    add_library(main SHARED ${BLACK_SOURCES})
+    set(BLACK_TARGET main)
+endif()
 # compat/ for the SDK's x86 header, the SDK harness's for the Winsock and DXGI names its portable runtime uses
-target_include_directories(main PRIVATE ${NATIVE}/compat ${SDK}/harness/compat ${NATIVE} ${GAME} ${SDK}/runtime ${GEN}
-                           ${CMAKE_CURRENT_BINARY_DIR} ${glslang_SOURCE_DIR})
-target_include_directories(main SYSTEM PRIVATE ${imgui_SOURCE_DIR})
+target_include_directories(${BLACK_TARGET} PRIVATE ${NATIVE}/compat ${SDK}/harness/compat ${NATIVE} ${GAME} ${SDK}/runtime ${GEN}
+                           ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/generated ${glslang_SOURCE_DIR})
+target_include_directories(${BLACK_TARGET} SYSTEM PRIVATE ${imgui_SOURCE_DIR})
 # x86 chars are signed, as the game's code and the runtime were written for
-target_compile_options(main PRIVATE -fno-strict-aliasing -fsigned-char)
-set(HOST_SOURCES ${RUNTIME_SOURCES} ${GAME_HOST_SOURCES} ${ANDROID_SOURCES})
-set_source_files_properties(${HOST_SOURCES} PROPERTIES COMPILE_OPTIONS "-include;${NATIVE}/compat/crt.h")
+target_compile_options(${BLACK_TARGET} PRIVATE -fno-strict-aliasing -fsigned-char)
+set_source_files_properties(${HOST_SOURCES} ${RUNTIME_SOURCES} ${GAME_HOST_SOURCES} PROPERTIES
+    COMPILE_OPTIONS "-include;${NATIVE}/compat/crt.h")
 set_source_files_properties(${GEN_SOURCES} PROPERTIES
     COMPILE_OPTIONS "-O2;-w;-fno-strict-aliasing;-fsigned-char")
 set_source_files_properties(${NATIVE}/vk_shader.cpp PROPERTIES COMPILE_DEFINITIONS ENABLE_HLSL)
-set_source_files_properties(${NATIVE}/game_files.cpp PROPERTIES
-    COMPILE_DEFINITIONS "EUROPE_PATCH=\"${GAME}/common/europe.patch\""
-    OBJECT_DEPENDS ${GAME}/common/europe.patch)
-target_link_libraries(main PRIVATE SDL3::SDL3 tomlplusplus::tomlplusplus glslang glslang-default-resource-limits
-                      vulkan android log)
-# 16 KB pages, as Android 15 devices may have
-target_link_options(main PRIVATE -Wl,-z,max-page-size=16384)
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(MOLTENVK_ROOT "" CACHE PATH "Root of the MoltenVK Release package")
+    # The official MoltenVK iOS package ships a static XCFramework under
+    # MoltenVK/static, while Vulkan headers are in the sibling MoltenVK/include.
+    set(MOLTENVK_INCLUDE "${MOLTENVK_ROOT}/MoltenVK/include")
+    set(MOLTENVK_XCFRAMEWORK "${MOLTENVK_ROOT}/MoltenVK/static/MoltenVK.xcframework")
+    set(MOLTENVK_LIBRARY "${MOLTENVK_XCFRAMEWORK}/ios-arm64/libMoltenVK.a")
+    if(NOT EXISTS "${MOLTENVK_XCFRAMEWORK}/Info.plist")
+        message(FATAL_ERROR "MoltenVK static XCFramework not found at ${MOLTENVK_XCFRAMEWORK}")
+    endif()
+    if(NOT EXISTS "${MOLTENVK_INCLUDE}/vulkan/vulkan.h")
+        message(FATAL_ERROR "MoltenVK Vulkan headers not found under ${MOLTENVK_INCLUDE}")
+    endif()
+    if(NOT EXISTS "${MOLTENVK_LIBRARY}")
+        message(FATAL_ERROR "MoltenVK iOS arm64 static library not found at ${MOLTENVK_LIBRARY}")
+    endif()
+    target_include_directories(${BLACK_TARGET} SYSTEM PRIVATE "${MOLTENVK_INCLUDE}")
+    target_link_libraries(${BLACK_TARGET} PRIVATE SDL3::SDL3-static tomlplusplus::tomlplusplus
+        glslang glslang-default-resource-limits "${MOLTENVK_LIBRARY}"
+        "-framework Metal" "-framework UIKit" "-framework QuartzCore" "-framework Foundation"
+        "-framework CoreGraphics" "-framework ImageIO" "-framework IOSurface")
+    target_link_options(${BLACK_TARGET} PRIVATE "-Wl,-dead_strip")
+else()
+    target_link_libraries(${BLACK_TARGET} PRIVATE SDL3::SDL3 tomlplusplus::tomlplusplus
+        glslang glslang-default-resource-limits vulkan android log)
+    # 16 KB pages, as Android 15 devices may have
+    target_link_options(${BLACK_TARGET} PRIVATE -Wl,-z,max-page-size=16384)
+endif()

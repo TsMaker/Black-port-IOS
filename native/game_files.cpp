@@ -1,7 +1,9 @@
 // The game on Android: its files or a disc image (.iso) in the Black folder on the phone's storage or on an SD card
 // (all files access granted) or in the app's own assets folder. The xbe must be the one this build was recompiled from; the Europe xbe
 // is turned into the US one by src/common/europe.patch, linked into the library.
+#if defined(__ANDROID__)
 #include <jni.h>
+#endif
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_system.h>
@@ -18,17 +20,9 @@
 
 extern const char kImageSha1[];  // the xbe recompiled into this library, written by CMake
 
-// src/common/europe.patch, EUROPE_PATCH as CMake names it
-__asm__(".section .rodata\n"
-        ".global kEuropePatch\n"
-        ".global kEuropePatchEnd\n"
-        ".balign 16\n"
-        "kEuropePatch:\n"
-        ".incbin \"" EUROPE_PATCH "\"\n"
-        "kEuropePatchEnd:\n"
-        ".previous\n");
-extern "C" const uint8_t kEuropePatch[];
-extern "C" const uint8_t kEuropePatchEnd[];
+// The patch is generated as a C++ byte array by CMake. This works with both
+// ELF (Android) and Mach-O (iOS), without platform-specific assembler directives.
+#include "europe_patch.h"
 
 namespace app {
 
@@ -36,12 +30,13 @@ namespace {
 
 namespace fs = std::filesystem;
 
-// the shared storage's folder for the game, readable with all files access: the files or the image in it, or in its
-// assets folder
+// Android shared-storage discovery is compiled only for the Android host.
+#if defined(__ANDROID__)
+// the shared storage's folder for the game, readable with all files access.
 constexpr const char* kShared = "/storage/emulated/0/Black";
 constexpr const char* kVolumes = "/storage";
 
-// the Black folders BlackActivity has from Android's storage volumes, which some phones don't show in /storage
+// the Black folders BlackActivity has from Android's storage volumes.
 std::vector<fs::path> ActivityCardFolders() {
     std::vector<fs::path> out;
     auto* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
@@ -69,9 +64,12 @@ std::vector<fs::path> ActivityCardFolders() {
     env->DeleteLocalRef(activity);
     return out;
 }
+#else
+std::vector<fs::path> ActivityCardFolders() { return {}; }
+#endif
 
-// the Black folder on each SD card or USB stick Android has mounted, /storage/<volume id>/Black; all files access
-// reads them as it does the phone's own storage
+#if defined(__ANDROID__)
+// the Black folder on each SD card or USB stick Android has mounted.
 std::vector<fs::path> RemovableFolders() {
     std::vector<fs::path> out = ActivityCardFolders();
     std::error_code ec, dir_ec;
@@ -89,14 +87,22 @@ std::vector<fs::path> RemovableFolders() {
     out.erase(std::unique(out.begin(), out.end()), out.end());
     return out;
 }
+#else
+std::vector<fs::path> RemovableFolders() { return {}; }
+#endif
 
 std::vector<fs::path> AssetFolders() {
+#if defined(__ANDROID__)
     std::vector<fs::path> out = {fs::path(kShared), fs::path(kShared) / "assets"};
     for (const fs::path& card : RemovableFolders()) {
         out.push_back(card);
         out.push_back(card / "assets");
     }
+#else
+    std::vector<fs::path> out;
+#endif
     out.push_back(ExeDir() / "assets");
+    out.push_back(ExeDir());
     return out;
 }
 
@@ -198,7 +204,7 @@ struct EuropePatch {
 
 // the US xbe in place of the Europe one; false leaves it as it was
 bool ConvertEurope(std::vector<uint8_t>& xbe) {
-    size_t size = size_t(kEuropePatchEnd - kEuropePatch);
+    size_t size = sizeof(kEuropePatch);
     if (!size) return false;
     EuropePatch europe{xbe, PatchReader(kEuropePatch, size)};
     while (!europe.patch.Done())
@@ -253,12 +259,17 @@ void CheckImage(const kernel::Disc& disc, const fs::path& iso) {
 void WaitForGame() {
     static bool logged = false;
     if (!logged) {
+#if defined(__ANDROID__)
         std::error_code ec;
         fs::is_directory(kShared, ec);
         std::string cards;
         for (const fs::path& card : RemovableFolders()) cards += ", " + card.string();
         LOGE("game: no game files in %s%s or %s%s, waiting for them", kShared, cards.c_str(),
              (ExeDir() / "assets").c_str(), ec == std::errc::permission_denied ? ", no access to the first" : "");
+#else
+        LOGE("game: no game files found; place the game image or extracted files in %s/assets",
+             (ExeDir()).string().c_str());
+#endif
         logged = true;
     }
     for (int i = 0; i < 10; i++) {

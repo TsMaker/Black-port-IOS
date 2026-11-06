@@ -1,10 +1,12 @@
-// The Android host: SDL's window and event loop, the settings and folders, the app's lifecycle; the game is described
+// The native host: SDL's window and event loop, the settings and folders, the app's lifecycle; the game is described
 // by app::kGame (src/common/game_info.cpp)
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
+#if defined(__ANDROID__)
 #include <android/log.h>
 #include <sys/system_properties.h>
 #include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <atomic>
@@ -32,6 +34,10 @@
 #include "image_symbols.h"
 #include "kernel/kernel.h"
 
+#if defined(__APPLE__)
+std::filesystem::path IosDocumentsDirectory();
+#endif
+
 namespace {
 
 SDL_Window* g_window = nullptr;
@@ -46,7 +52,8 @@ std::string Utf8(const wchar_t* w) {
     return s;
 }
 
-// the log's lines to logcat as well: stderr is read on a thread of its own
+#if defined(__ANDROID__)
+// Forward stderr to Android logcat.
 void LogToLogcat() {
     int fds[2];
     if (pipe(fds)) return;
@@ -68,6 +75,9 @@ std::string Property(const char* name) {
     __system_property_get(name, v);
     return v;
 }
+#else
+void LogToLogcat() {}
+#endif
 
 void SetForeground(bool on) {
     {
@@ -217,9 +227,14 @@ void LogSystem() {
     std::strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
     LOGR("%ls (%s), %s, build %s", kGame.title, IMAGE_XBE, date, BLACK_COMMIT);
     LOGR("Path: %s", ExeDir().c_str());
+#if defined(__ANDROID__)
     LOGR("Device: %s %s, Android %s (API %d)", Property("ro.product.manufacturer").c_str(),
          Property("ro.product.model").c_str(), Property("ro.build.version.release").c_str(), SDL_GetAndroidSDKVersion());
     LOGR("CPU: %s (%d threads)", Property("ro.soc.model").c_str(), SDL_GetNumLogicalCPUCores());
+#else
+    LOGR("Device: iOS device");
+    LOGR("CPU threads: %d", SDL_GetNumLogicalCPUCores());
+#endif
     LOGR("RAM: %.1f GB", SDL_GetSystemRAM() / 1024.0);
     Mode desk = Desktop();
     LOGR("Display: %ux%u, %.0f Hz", desk.width, desk.height, RefreshRate());
@@ -250,10 +265,19 @@ float RenderScale(uint32_t guest_height) {
 // app-specific external storage: the player can reach the logs, saves and settings over USB
 std::filesystem::path ExeDir() {
     static const std::filesystem::path dir = [] {
+#if defined(__ANDROID__)
         const char* p = nullptr;
         if (SDL_GetAndroidExternalStorageState() & SDL_ANDROID_EXTERNAL_STORAGE_WRITE) p = SDL_GetAndroidExternalStoragePath();
         if (!p) p = SDL_GetAndroidInternalStoragePath();
         return std::filesystem::path(p ? p : ".");
+#elif defined(__APPLE__)
+        return IosDocumentsDirectory();
+#else
+        char* p = SDL_GetPrefPath("TsMaker", "Black");
+        std::filesystem::path result = p ? std::filesystem::path(p) : std::filesystem::temp_directory_path();
+        SDL_free(p);
+        return result;
+#endif
     }();
     return dir;
 }
@@ -302,7 +326,7 @@ void InitUi() {
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad | ImGuiConfigFlags_IsTouchScreen;
-    io.BackendPlatformName = "android_sdl3";
+    io.BackendPlatformName = SDL_GetPlatform();
 }
 
 void Dispatch(const SDL_Event& e) {
@@ -319,7 +343,7 @@ void Dispatch(const SDL_Event& e) {
             SetForeground(true);
             break;
         case SDL_EVENT_LOW_MEMORY:
-            LOGW("app: Android is low on memory");
+            LOGW("app: operating system reports low memory");
             break;
         case SDL_EVENT_SENSOR_UPDATE:
         case SDL_EVENT_GAMEPAD_SENSOR_UPDATE:
@@ -344,9 +368,11 @@ int main(int, char**) {
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
     SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
     SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "0");
+#if defined(__ANDROID__)
     SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+#endif
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_GAMEPAD | SDL_INIT_AUDIO | SDL_INIT_SENSOR)) {
-        __android_log_print(ANDROID_LOG_ERROR, "BLACK", "SDL_Init: %s", SDL_GetError());
+        LOGE("SDL_Init: %s", SDL_GetError());
         return 1;
     }
     logx::Init((app::ExeDir() / "logs").string(), app::kGame.log);
