@@ -180,7 +180,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     target_link_libraries(${BLACK_TARGET} PRIVATE SDL3::SDL3-static tomlplusplus::tomlplusplus
         glslang glslang-default-resource-limits "${MOLTENVK_LIBRARY}"
         "-framework Metal" "-framework UIKit" "-framework QuartzCore" "-framework Foundation"
-        "-framework CoreGraphics" "-framework IOSurface")
+        "-framework CoreGraphics" "-framework ImageIO" "-framework IOSurface")
     target_link_options(${BLACK_TARGET} PRIVATE "-Wl,-dead_strip")
 else()
     target_link_libraries(${BLACK_TARGET} PRIVATE SDL3::SDL3 tomlplusplus::tomlplusplus
