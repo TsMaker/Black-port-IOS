@@ -263,8 +263,13 @@ void WaitForGame() {
         fs::is_directory(kShared, ec);
         std::string cards;
         for (const fs::path& card : RemovableFolders()) cards += ", " + card.string();
+#if defined(__ANDROID__)
         LOGE("game: no game files in %s%s or %s%s, waiting for them", kShared, cards.c_str(),
              (ExeDir() / "assets").c_str(), ec == std::errc::permission_denied ? ", no access to the first" : "");
+#else
+        LOGE("game: no game files found; place the game image or extracted files in %s/assets",
+             (ExeDir()).string().c_str());
+#endif
         logged = true;
     }
     for (int i = 0; i < 10; i++) {
