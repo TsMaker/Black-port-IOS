@@ -52,10 +52,11 @@ workflows:
             -scheme "MoltenVK Package (iOS only)" \
             -configuration Release \
             -destination "generic/platform=iOS" build
-          MVK=$(find "$PWD" -type d -name MoltenVK.xcframework | head -n 1)
-          [ -n "$MVK" ] || { echo "MoltenVK.xcframework não foi gerado"; exit 1; }
-          cp -R "$MVK" "$CM_BUILD_DIR/MoltenVK.xcframework"
-          echo "MOLTENVK_XCFRAMEWORK=$CM_BUILD_DIR/MoltenVK.xcframework" >> $CM_ENV
+          PACKAGE="$PWD/Package/Release"
+          MVK=$(find "$PACKAGE" -type d -name MoltenVK.xcframework | head -n 1)
+          [ -n "$MVK" ] || { echo "MoltenVK.xcframework não foi gerado em Package/Release"; find "$PWD/Package" -maxdepth 5 -print; exit 1; }
+          cp -R "$PACKAGE/." "$CM_BUILD_DIR/moltenvk-package/"
+          echo "MOLTENVK_ROOT=$CM_BUILD_DIR/moltenvk-package" >> $CM_ENV
 
       - name: Compilar aplicativo iOS
         script: |
@@ -66,7 +67,7 @@ workflows:
             -DCMAKE_OSX_SYSROOT=iphoneos \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DMOLTENVK_XCFRAMEWORK="$MOLTENVK_XCFRAMEWORK"
+            -DMOLTENVK_ROOT="$MOLTENVK_ROOT"
           cmake --build . --config Release -- \
             -sdk iphoneos CODE_SIGNING_ALLOWED=NO
 
