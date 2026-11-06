@@ -70,6 +70,20 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     string(REPLACE "${XBE_MEMFD_CALL}"
         "int fd = -1;\n    if (g_base) {\n        fd = shm_open(\"/black-port-ram\", O_CREAT | O_RDWR, 0600);\n        if (fd >= 0) shm_unlink(\"/black-port-ram\");\n    }"
         XBE_MEMORY_CONTENT "${XBE_MEMORY_CONTENT}")
+
+    # iOS may reject a 4 GiB anonymous mapping when MAP_NORESERVE is requested
+    # or when a fixed high-address hint is supplied. The guest runtime uses
+    # offsets from g_base, so it does not require a particular host address.
+    # Let Darwin choose an available contiguous range and use portable flags.
+    set(XBE_GUEST_MMAP_CALL "void* p = mmap(reinterpret_cast<void*>(0x100000000ull), size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);")
+    string(FIND "${XBE_MEMORY_CONTENT}" "${XBE_GUEST_MMAP_CALL}" XBE_GUEST_MMAP_POS)
+    if(XBE_GUEST_MMAP_POS EQUAL -1)
+        message(FATAL_ERROR "Could not locate the SDK 4 GB guest mmap call for the iOS compatibility patch")
+    endif()
+    string(REPLACE "${XBE_GUEST_MMAP_CALL}"
+        "void* p = mmap(nullptr, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);"
+        XBE_MEMORY_CONTENT "${XBE_MEMORY_CONTENT}")
+
     file(WRITE "${XBE_MEMORY_SOURCE}" "${XBE_MEMORY_CONTENT}")
 endif()
 
