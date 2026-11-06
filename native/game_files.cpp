@@ -20,17 +20,9 @@
 
 extern const char kImageSha1[];  // the xbe recompiled into this library, written by CMake
 
-// src/common/europe.patch, EUROPE_PATCH as CMake names it
-__asm__(".section .rodata\n"
-        ".global kEuropePatch\n"
-        ".global kEuropePatchEnd\n"
-        ".balign 16\n"
-        "kEuropePatch:\n"
-        ".incbin \"" EUROPE_PATCH "\"\n"
-        "kEuropePatchEnd:\n"
-        ".previous\n");
-extern "C" const uint8_t kEuropePatch[];
-extern "C" const uint8_t kEuropePatchEnd[];
+// The patch is generated as a C++ byte array by CMake. This works with both
+// ELF (Android) and Mach-O (iOS), without platform-specific assembler directives.
+#include "europe_patch.h"
 
 namespace app {
 
@@ -212,7 +204,7 @@ struct EuropePatch {
 
 // the US xbe in place of the Europe one; false leaves it as it was
 bool ConvertEurope(std::vector<uint8_t>& xbe) {
-    size_t size = size_t(kEuropePatchEnd - kEuropePatch);
+    size_t size = sizeof(kEuropePatch);
     if (!size) return false;
     EuropePatch europe{xbe, PatchReader(kEuropePatch, size)};
     while (!europe.patch.Done())
