@@ -55,6 +55,7 @@ workflows:
           PACKAGE="$PWD/Package/Release"
           MVK=$(find "$PACKAGE" -type d -name MoltenVK.xcframework | head -n 1)
           [ -n "$MVK" ] || { echo "MoltenVK.xcframework não foi gerado em Package/Release"; find "$PWD/Package" -maxdepth 5 -print; exit 1; }
+          mkdir -p "$CM_BUILD_DIR/moltenvk-package"
           cp -R "$PACKAGE/." "$CM_BUILD_DIR/moltenvk-package/"
           echo "MOLTENVK_ROOT=$CM_BUILD_DIR/moltenvk-package" >> $CM_ENV
 
